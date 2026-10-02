@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../providers/auth_provider.dart';
+import '../../screens/splash/splash_screen.dart';
 import '../../screens/auth/login_screen.dart';
 import '../../screens/auth/signup_screen.dart';
 import '../../screens/auth/otp_screen.dart';
@@ -20,19 +21,35 @@ final routerProvider = Provider<GoRouter>((ref) {
   final authState = ref.watch(authProvider);
 
   return GoRouter(
-    initialLocation: '/login',
+    initialLocation: '/splash',
     redirect: (context, state) {
+      final loc = state.matchedLocation;
       final isAuth = authState.status == AuthStatus.authenticated;
-      final isAuthRoute = state.matchedLocation == '/login' ||
-          state.matchedLocation == '/signup' ||
-          state.matchedLocation == '/onboarding' ||
-          state.matchedLocation.startsWith('/verify-otp');
 
-      if (!isAuth && !isAuthRoute) return '/login';
-      if (isAuth && isAuthRoute) return '/home';
+      // Allow splash screen to show initial loading animation
+      if (loc == '/splash') return null;
+
+      final isPublicAuthRoute = loc == '/login' ||
+          loc == '/signup' ||
+          loc == '/onboarding' ||
+          loc.startsWith('/verify-otp');
+
+      // Non-authenticated users cannot access main application
+      if (!isAuth && !isPublicAuthRoute) return '/login';
+
+      // Authenticated users shouldn't access login/signup screens
+      if (isAuth &&
+          (loc == '/login' || loc == '/signup' || loc == '/onboarding')) {
+        return '/home';
+      }
+
       return null;
     },
     routes: [
+      GoRoute(
+        path: '/splash',
+        builder: (context, state) => const SplashScreen(),
+      ),
       GoRoute(
         path: '/onboarding',
         builder: (context, state) => const OnboardingScreen(),

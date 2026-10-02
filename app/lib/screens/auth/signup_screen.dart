@@ -29,7 +29,26 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     final name = _nameController.text.trim();
     final email = _emailController.text.trim();
     final password = _passwordController.text;
-    if (email.isEmpty || password.isEmpty) return;
+
+    if (email.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter your email address'), backgroundColor: AppColors.red),
+      );
+      return;
+    }
+    if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(email)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a valid email address'), backgroundColor: AppColors.red),
+      );
+      return;
+    }
+    if (password.length < 8) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Password must be at least 8 characters long'), backgroundColor: AppColors.red),
+      );
+      return;
+    }
+
     final success = await ref.read(authProvider.notifier).register(
           email: email,
           password: password,

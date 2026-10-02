@@ -151,6 +151,10 @@ class AuthNotifier extends Notifier<AuthState> {
           e.type == DioExceptionType.connectionError) {
         return 'Could not connect to server. Check your network connection.';
       }
+      if (e.type == DioExceptionType.receiveTimeout ||
+          e.type == DioExceptionType.sendTimeout) {
+        return 'Server took too long to respond. Cloud instance may be waking up, please tap again.';
+      }
     }
     if (e is Exception) {
       final str = e.toString();

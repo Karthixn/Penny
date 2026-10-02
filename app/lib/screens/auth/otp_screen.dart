@@ -227,25 +227,36 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
               ),
 
               const SizedBox(height: 24),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AppColors.border),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.info_outline, size: 16, color: AppColors.primary),
-                    SizedBox(width: 8),
-                    Flexible(
-                      child: Text(
-                        'Tip: Check your email or use testing code: 123456',
-                        style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+              GestureDetector(
+                onTap: () {
+                  _otpController.text = '123456';
+                  setState(() {});
+                  _verify();
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.touch_app_outlined, size: 18, color: AppColors.primary),
+                      SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          'Tap here to auto-fill testing code: 123456',
+                          style: TextStyle(
+                            color: AppColors.primary,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12,
+                          ),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
 

@@ -8,6 +8,6 @@ class ApiConstants {
     return 'https://penny-37mv.onrender.com';
   }
 
-  static const connectTimeout = Duration(seconds: 25);
-  static const receiveTimeout = Duration(seconds: 25);
+  static const connectTimeout = Duration(seconds: 60);
+  static const receiveTimeout = Duration(seconds: 60);
 }
