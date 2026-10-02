@@ -115,8 +115,21 @@ export class AuthService {
     };
   }
 
-  async sendOtp(dto: SendOtpDto) {
-    const email = dto.email.toLowerCase();
+  async sendOtp(dto: SendOtpDto, authHeader?: string) {
+    let email = dto.email?.toLowerCase().trim();
+    if (!email && authHeader?.startsWith('Bearer ')) {
+      const token = authHeader.substring(7);
+      try {
+        const payload = this.jwt.verify(token);
+        const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
+        if (user) email = user.email;
+      } catch (_) {}
+    }
+
+    if (!email) {
+      throw new BadRequestException('Please provide an email address');
+    }
+
     const purpose = dto.purpose || 'email_verify';
     const user = await this.prisma.user.findUnique({ where: { email } });
     if (!user || user.deletedAt) {
@@ -131,8 +144,21 @@ export class AuthService {
     };
   }
 
-  async verifyOtp(dto: VerifyOtpDto) {
-    const email = dto.email.toLowerCase();
+  async verifyOtp(dto: VerifyOtpDto, authHeader?: string) {
+    let email = dto.email?.toLowerCase().trim();
+    if (!email && authHeader?.startsWith('Bearer ')) {
+      const token = authHeader.substring(7);
+      try {
+        const payload = this.jwt.verify(token);
+        const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
+        if (user) email = user.email;
+      } catch (_) {}
+    }
+
+    if (!email) {
+      throw new BadRequestException('Please provide an email address');
+    }
+
     const purpose = dto.purpose || 'email_verify';
     const user = await this.prisma.user.findUnique({ where: { email } });
     if (!user || user.deletedAt) {

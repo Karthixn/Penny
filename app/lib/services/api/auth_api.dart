@@ -41,15 +41,18 @@ class AuthApi {
   }
 
   Future<Map<String, dynamic>> verifyOtp({
-    required String email,
+    String? email,
     required String otp,
     String purpose = 'email_verify',
   }) async {
-    final response = await _client.dio.post('/auth/verify-otp', data: {
-      'email': email,
+    final payload = <String, dynamic>{
       'otp': otp,
       'purpose': purpose,
-    });
+    };
+    if (email != null && email.trim().isNotEmpty) {
+      payload['email'] = email.trim();
+    }
+    final response = await _client.dio.post('/auth/verify-otp', data: payload);
     final data = response.data as Map<String, dynamic>;
     if (data['accessToken'] != null) {
       await SecureStorage.saveTokens(
@@ -61,13 +64,16 @@ class AuthApi {
   }
 
   Future<Map<String, dynamic>> sendOtp({
-    required String email,
+    String? email,
     String purpose = 'email_verify',
   }) async {
-    final response = await _client.dio.post('/auth/send-otp', data: {
-      'email': email,
+    final payload = <String, dynamic>{
       'purpose': purpose,
-    });
+    };
+    if (email != null && email.trim().isNotEmpty) {
+      payload['email'] = email.trim();
+    }
+    final response = await _client.dio.post('/auth/send-otp', data: payload);
     return response.data as Map<String, dynamic>;
   }
 

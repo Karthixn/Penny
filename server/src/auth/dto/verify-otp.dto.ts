@@ -1,8 +1,9 @@
-import { IsEmail, IsString, Length, IsOptional, IsIn } from 'class-validator';
+import { IsEmail, IsString, Length, IsOptional, IsIn, ValidateIf } from 'class-validator';
 
 export class VerifyOtpDto {
+  @ValidateIf((o) => typeof o.email === 'string' && o.email.trim().length > 0)
   @IsEmail()
-  email: string;
+  email?: string;
 
   @IsString()
   @Length(6, 6)

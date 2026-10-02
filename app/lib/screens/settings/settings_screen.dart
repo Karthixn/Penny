@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -82,7 +83,25 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  void _startEmailVerification(String email) async {
+  String _cleanErrorMessage(dynamic e) {
+    if (e is DioException) {
+      final resData = e.response?.data;
+      if (resData is Map && resData['message'] != null) {
+        final msg = resData['message'];
+        if (msg is List && msg.isNotEmpty) return msg.first.toString();
+        if (msg is String) return msg;
+      }
+      if (e.response?.statusCode == 400) return 'Invalid verification request';
+      if (e.response?.statusCode == 404) return 'User account not found';
+      if (e.type == DioExceptionType.connectionTimeout || e.type == DioExceptionType.connectionError) {
+        return 'Could not connect to server. Check your network.';
+      }
+      return e.message ?? 'Network error occurred';
+    }
+    return e.toString().replaceFirst('Exception: ', '');
+  }
+
+  void _startEmailVerification([String? email]) async {
     try {
       showDialog(
         context: context,
@@ -92,16 +111,29 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ),
       );
 
-      await ref.read(authApiProvider).sendOtp(email: email);
+      final effectiveEmail = (email != null && email.trim().isNotEmpty)
+          ? email.trim()
+          : (ref.read(userProvider).profile?['email'] as String? ?? '');
+
+      final res = await ref.read(authApiProvider).sendOtp(
+        email: effectiveEmail.isNotEmpty ? effectiveEmail : null,
+      );
       if (!mounted) return;
       Navigator.of(context, rootNavigator: true).pop(); // dismiss loading
 
-      _showOtpVerificationSheet(email);
+      final targetEmail = (res['email'] as String?)?.isNotEmpty == true
+          ? res['email'] as String
+          : effectiveEmail;
+
+      _showOtpVerificationSheet(targetEmail);
     } catch (e) {
       if (!mounted) return;
       Navigator.of(context, rootNavigator: true).pop();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to request verification code: $e'), backgroundColor: AppColors.red),
+        SnackBar(
+          content: Text('Failed to request verification code: ${_cleanErrorMessage(e)}'),
+          backgroundColor: AppColors.red,
+        ),
       );
     }
   }
@@ -142,7 +174,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
               const SizedBox(height: 6),
               Text(
-                'Enter the 6-digit code sent to\n$email',
+                email.isNotEmpty
+                    ? 'Enter the 6-digit code sent to\n$email'
+                    : 'Enter the 6-digit code sent to your registered email',
                 textAlign: TextAlign.center,
                 style: const TextStyle(color: Colors.white70, fontSize: 13),
               ),
@@ -181,10 +215,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         if (code.length != 6) return;
                         setModalState(() => isVerifying = true);
                         try {
-                          await ref.read(authApiProvider).verifyOtp(email: email, otp: code);
+                          await ref.read(authApiProvider).verifyOtp(
+                            email: email.isNotEmpty ? email : null,
+                            otp: code,
+                          );
                           if (ctx.mounted) Navigator.pop(ctx);
                           if (!mounted) return;
-                          ref.read(userProvider.notifier).loadProfile();
+                          await ref.read(userProvider.notifier).loadProfile();
+                          if (!mounted) return;
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
                               content: Text('Email verified successfully! 🎉'),
@@ -195,7 +233,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           setModalState(() => isVerifying = false);
                           if (!mounted) return;
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Verification failed: $err'), backgroundColor: AppColors.red),
+                            SnackBar(
+                              content: Text('Verification failed: ${_cleanErrorMessage(err)}'),
+                              backgroundColor: AppColors.red,
+                            ),
                           );
                         }
                       },
@@ -207,12 +248,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               TextButton(
                 onPressed: () async {
                   try {
-                    await ref.read(authApiProvider).sendOtp(email: email);
+                    await ref.read(authApiProvider).sendOtp(
+                      email: email.isNotEmpty ? email : null,
+                    );
                     if (!mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('New code sent!'), backgroundColor: Color(0xFF4CAF50)),
                     );
-                  } catch (_) {}
+                  } catch (e) {
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Failed to resend: ${_cleanErrorMessage(e)}'),
+                        backgroundColor: AppColors.red,
+                      ),
+                    );
+                  }
                 },
                 child: const Text('Resend Code', style: TextStyle(color: Color(0xFFF2994A))),
               ),
@@ -259,11 +310,40 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
-      body: userState.isLoading
+      body: userState.isLoading && profile == null
           ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: const EdgeInsets.all(20),
-              children: [
+          : profile == null
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24.0),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.error_outline, color: AppColors.red, size: 48),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'Failed to load profile',
+                          style: TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          userState.error ?? 'Please check your connection and try again.',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                        ),
+                        const SizedBox(height: 20),
+                        ElevatedButton.icon(
+                          onPressed: () => ref.read(userProvider.notifier).loadProfile(),
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : ListView(
+                  padding: const EdgeInsets.all(20),
+                  children: [
                 // Profile card
                 Container(
                   padding: const EdgeInsets.all(20),
