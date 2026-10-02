@@ -48,18 +48,8 @@ export class AuthService {
             isEmailVerified: false,
           },
         });
-      } else if (existing.isEmailVerified) {
-        throw new ConflictException('Email already registered');
       } else {
-        // User registered previously but never verified — update details and send new OTP
-        const passwordHash = await bcrypt.hash(dto.password, 12);
-        user = await this.prisma.user.update({
-          where: { id: existing.id },
-          data: {
-            passwordHash,
-            displayName: dto.displayName ?? existing.displayName,
-          },
-        });
+        throw new ConflictException('Email already registered');
       }
     } else {
       const passwordHash = await bcrypt.hash(dto.password, 12);
@@ -73,18 +63,29 @@ export class AuthService {
       });
     }
 
-    // Clean up older pending tokens so rate limit doesn't block fresh registration
+    // Clean up older pending tokens
     await this.prisma.otpToken.deleteMany({
       where: { userId: user.id, purpose: 'email_verify' },
     });
 
-    // Generate & send real OTP email
-    await this.generateAndSendOtp(user.id, user.email, 'email_verify');
+    // Optionally dispatch OTP email in the background without blocking registration
+    this.generateAndSendOtp(user.id, user.email, 'email_verify').catch((err) => {
+      this.logger.warn(`Initial background OTP dispatch skipped/failed: ${err?.message || err}`);
+    });
+
+    // Generate session tokens so the user logs in immediately!
+    const tokens = await this.generateTokenPair(user.id);
 
     return {
-      message: 'Verification code sent to your email',
-      email: user.email,
-      requiresVerification: true,
+      ...tokens,
+      user: {
+        id: user.id,
+        email: user.email,
+        displayName: user.displayName,
+        isEmailVerified: user.isEmailVerified,
+      },
+      message: 'Account created successfully',
+      requiresVerification: false,
     };
   }
 
@@ -100,17 +101,18 @@ export class AuthService {
     const valid = await bcrypt.compare(dto.password, user.passwordHash);
     if (!valid) throw new UnauthorizedException('Invalid credentials');
 
-    // If user has not verified their email yet (and isn't the demo user)
-    if (!user.isEmailVerified && user.email !== 'demo@penny.app') {
-      await this.generateAndSendOtp(user.id, user.email, 'email_verify');
-      return {
-        requiresVerification: true,
+    const tokens = await this.generateTokenPair(user.id);
+    return {
+      ...tokens,
+      user: {
+        id: user.id,
         email: user.email,
-        message: 'Please verify your email address to continue.',
-      };
-    }
-
-    return this.generateTokenPair(user.id);
+        displayName: user.displayName,
+        isEmailVerified: user.isEmailVerified,
+      },
+      message: 'Logged in successfully',
+      requiresVerification: false,
+    };
   }
 
   async sendOtp(dto: SendOtpDto) {

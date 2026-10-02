@@ -15,6 +15,7 @@ export class UsersService {
         displayName: true,
         currency: true,
         monthlyBudget: true,
+        isEmailVerified: true,
         createdAt: true,
       },
     });
@@ -32,6 +33,7 @@ export class UsersService {
         displayName: true,
         currency: true,
         monthlyBudget: true,
+        isEmailVerified: true,
       },
     });
   }
