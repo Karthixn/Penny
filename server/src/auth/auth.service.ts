@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   UnauthorizedException,
   ConflictException,
   BadRequestException,
@@ -18,6 +19,8 @@ import { VerifyOtpDto } from './dto/verify-otp.dto.js';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private prisma: PrismaService,
     private jwt: JwtService,
@@ -228,8 +231,12 @@ export class AuthService {
       },
     });
 
-    // Dispatch email via Resend
-    await this.mailService.sendOtpEmail(email, otp, purpose);
+    this.logger.log(`Generated OTP token for user ${userId} (${email}) [Code: ${otp}]`);
+
+    // Dispatch email asynchronously so client request completes immediately without delay
+    this.mailService.sendOtpEmail(email, otp, purpose).catch((err: any) => {
+      this.logger.warn(`Could not dispatch OTP email to ${email}: ${err?.message || err}`);
+    });
   }
 
   private async generateTokenPair(userId: string, family?: string) {

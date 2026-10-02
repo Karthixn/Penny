@@ -17,6 +17,9 @@ export class MailService {
     if (smtpUser && smtpPass) {
       this.transporter = nodemailer.createTransport({
         service: 'gmail',
+        connectionTimeout: 4000,
+        greetingTimeout: 4000,
+        socketTimeout: 5000,
         auth: {
           user: smtpUser,
           pass: smtpPass,
