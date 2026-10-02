@@ -136,10 +136,12 @@ export class GroupsService {
     });
 
     const balances: Record<string, number> = {};
+    const spent: Record<string, number> = {};
 
     for (const exp of expenses) {
       for (const payer of exp.payers) {
         balances[payer.userId] = (balances[payer.userId] ?? 0) + payer.amount;
+        spent[payer.userId] = (spent[payer.userId] ?? 0) + payer.amount;
       }
       for (const split of exp.splits) {
         balances[split.userId] = (balances[split.userId] ?? 0) - split.amount;
@@ -159,6 +161,7 @@ export class GroupsService {
     return members.map((m) => ({
       user: m.user,
       balance: balances[m.userId] ?? 0,
+      spent: spent[m.userId] ?? 0,
     }));
   }
 
