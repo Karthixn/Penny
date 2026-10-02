@@ -37,9 +37,16 @@ export class UsersService {
   }
 
   async deleteAccount(userId: string) {
+    await this.prisma.refreshToken.deleteMany({ where: { userId } });
+    await this.prisma.otpToken.deleteMany({ where: { userId } });
+    await this.prisma.reminder.deleteMany({ where: { userId } });
+    await this.prisma.groupMember.deleteMany({ where: { userId } });
     await this.prisma.user.update({
       where: { id: userId },
-      data: { deletedAt: new Date() },
+      data: {
+        deletedAt: new Date(),
+        isEmailVerified: false,
+      },
     });
   }
 }

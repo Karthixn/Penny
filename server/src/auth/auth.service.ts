@@ -36,18 +36,31 @@ export class AuthService {
 
     let user;
     if (existing) {
-      if (existing.isEmailVerified) {
+      if (existing.deletedAt !== null) {
+        // User was previously deleted! Reactivate and allow fresh re-registration
+        const passwordHash = await bcrypt.hash(dto.password, 12);
+        user = await this.prisma.user.update({
+          where: { id: existing.id },
+          data: {
+            passwordHash,
+            displayName: dto.displayName ?? null,
+            deletedAt: null,
+            isEmailVerified: false,
+          },
+        });
+      } else if (existing.isEmailVerified) {
         throw new ConflictException('Email already registered');
+      } else {
+        // User registered previously but never verified — update details and send new OTP
+        const passwordHash = await bcrypt.hash(dto.password, 12);
+        user = await this.prisma.user.update({
+          where: { id: existing.id },
+          data: {
+            passwordHash,
+            displayName: dto.displayName ?? existing.displayName,
+          },
+        });
       }
-      // User registered previously but never verified — update details and send new OTP
-      const passwordHash = await bcrypt.hash(dto.password, 12);
-      user = await this.prisma.user.update({
-        where: { id: existing.id },
-        data: {
-          passwordHash,
-          displayName: dto.displayName ?? existing.displayName,
-        },
-      });
     } else {
       const passwordHash = await bcrypt.hash(dto.password, 12);
       user = await this.prisma.user.create({
@@ -59,6 +72,11 @@ export class AuthService {
         },
       });
     }
+
+    // Clean up older pending tokens so rate limit doesn't block fresh registration
+    await this.prisma.otpToken.deleteMany({
+      where: { userId: user.id, purpose: 'email_verify' },
+    });
 
     // Generate & send real OTP email
     await this.generateAndSendOtp(user.id, user.email, 'email_verify');

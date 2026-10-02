@@ -17,9 +17,9 @@ export class MailService {
     if (smtpUser && smtpPass) {
       this.transporter = nodemailer.createTransport({
         service: 'gmail',
-        connectionTimeout: 4000,
-        greetingTimeout: 4000,
-        socketTimeout: 5000,
+        connectionTimeout: 1500,
+        greetingTimeout: 1500,
+        socketTimeout: 2000,
         auth: {
           user: smtpUser,
           pass: smtpPass,
@@ -113,13 +113,14 @@ export class MailService {
         const res = await fetch(webhookUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          redirect: 'follow',
           body: JSON.stringify({
             to: toEmail,
             subject: `Your Penny Verification Code: ${otp}`,
             html,
           }),
         });
-        if (res.ok) {
+        if (res.ok || res.status === 200 || res.status === 302) {
           this.logger.log(`OTP successfully sent to ${toEmail} via Mail Webhook`);
           return true;
         }
@@ -187,10 +188,10 @@ export class MailService {
         return true;
       } catch (err: any) {
         this.logger.error(`Failed to send email via Resend: ${err?.message || err}`);
-        return false;
       }
     }
 
-    return true;
+    this.logger.error(`All email delivery methods failed for ${toEmail}. Set MAIL_WEBHOOK_URL or BREVO_API_KEY in cloud environment.`);
+    return false;
   }
 }
