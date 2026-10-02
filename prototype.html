@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Penny — Interactive Prototype</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-font-smoothing:antialiased}
+body{font-family:'DM Sans',system-ui,sans-serif;background:#0a0a0f;display:flex;justify-content:center;align-items:center;min-height:100vh;overflow:hidden}
+.phone{width:390px;height:844px;background:#0C0D14;position:relative;overflow:hidden;border-radius:40px;border:3px solid #222;box-shadow:0 0 60px rgba(0,0,0,.6)}
+.screen{position:absolute;inset:0;display:flex;flex-direction:column;overflow:hidden;transition:transform .35s cubic-bezier(.4,0,.2,1),opacity .35s;will-change:transform,opacity}
+.screen.hidden{transform:translateX(100%);opacity:0;pointer-events:none}
+.screen.hidden-left{transform:translateX(-30%);opacity:0;pointer-events:none}
+.screen.active{transform:translateX(0);opacity:1}
+
+/* Colors */
+:root{--bg:#0C0D14;--s1:#191B26;--s2:#22253A;--pri:#7C6FF7;--acc:#FF8C42;--grn:#00D68F;--red:#FF5757;--t1:#ECEAF6;--t2:#9B9DB8;--t3:#595B73;--brd:rgba(255,255,255,.06)}
+
+/* Scrollable */
+.scrollable{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.scrollable::-webkit-scrollbar{display:none}
+
+/* Bottom nav */
+.bnav{height:72px;background:#131520;border-top:1px solid var(--brd);display:flex;align-items:center;padding:0 4px;flex-shrink:0}
+.bnav-item{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 0;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.bnav-item .dot{width:4px;height:4px;border-radius:2px;margin-top:-1px}
+
+/* Buttons */
+.btn{border:none;outline:none;cursor:pointer;-webkit-tap-highlight-color:transparent;font-family:inherit}
+.btn-primary{background:linear-gradient(135deg,var(--pri),#5B4FD6);border-radius:16px;padding:16px;text-align:center;font-size:16px;font-weight:700;color:#fff;box-shadow:0 4px 20px rgba(124,111,247,.4);width:100%}
+.btn-green{background:linear-gradient(135deg,var(--grn),#00B87A);border-radius:16px;padding:16px;text-align:center;font-size:16px;font-weight:700;color:#fff;box-shadow:0 4px 20px rgba(0,214,143,.35);width:100%}
+
+/* Card */
+.card{background:var(--s1);border-radius:18px;padding:16px;border:1px solid var(--brd)}
+
+/* Input field */
+.field{background:var(--s1);border:1.5px solid rgba(255,255,255,.08);border-radius:14px;padding:14px 16px;font-size:15px;color:var(--t1);width:100%;font-family:inherit;outline:none}
+.field:focus{border-color:var(--pri)}
+.field::placeholder{color:var(--t3)}
+
+/* Numpad */
+.numpad{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:0 16px}
+.numkey{background:var(--s1);border:1px solid var(--brd);border-radius:14px;padding:16px 0;font-size:22px;font-weight:600;color:var(--t1);text-align:center;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:background .1s}
+.numkey:active{background:var(--s2)}
+.numkey.accent{background:linear-gradient(135deg,var(--pri),#5B4FD6);color:#fff;border-color:transparent}
+
+/* Category chips */
+.cat-chip{padding:10px 16px;border-radius:12px;background:var(--s1);border:1.5px solid var(--brd);font-size:13px;font-weight:600;color:var(--t2);cursor:pointer;white-space:nowrap;transition:all .15s;display:flex;align-items:center;gap:6px}
+.cat-chip.sel{border-color:var(--pri);background:rgba(124,111,247,.15);color:var(--pri)}
+
+/* Animations */
+@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.fade-up{animation:fadeUp .4s ease-out both}
+
+/* Quick add */
+.quick-chip{padding:8px 14px;background:var(--s1);border-radius:12px;border:1px solid var(--brd);display:flex;align-items:center;gap:6px;white-space:nowrap;flex-shrink:0;cursor:pointer;transition:all .15s}
+.quick-chip:active{background:var(--s2);transform:scale(.96)}
+
+/* Toggle */
+.toggle{width:48px;height:28px;border-radius:14px;position:relative;cursor:pointer;transition:background .2s}
+.toggle .knob{width:24px;height:24px;border-radius:12px;background:#fff;position:absolute;top:2px;transition:left .2s;box-shadow:0 1px 4px rgba(0,0,0,.2)}
+
+/* UPI buttons */
+.upi-btn{flex:1;background:var(--s1);border-radius:12px;padding:10px 8px;display:flex;flex-direction:column;align-items:center;gap:6px;border:1px solid var(--brd);cursor:pointer;transition:all .15s}
+.upi-btn:active{background:var(--s2);transform:scale(.95)}
+</style>
+</head>
+<body>
+<div class="phone" id="app">
+
+<!-- ==================== ONBOARDING 1 ==================== -->
+<div class="screen active" id="scr-onboard1">
+  <div style="height:44px;padding:14px 24px 0;display:flex;justify-content:flex-end;align-items:center;flex-shrink:0">
+    <span style="font-size:13px;color:var(--pri);font-weight:600;cursor:pointer" onclick="go('scr-home')">Skip</span>
+  </div>
+  <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 40px">
+    <div style="position:relative;width:220px;height:220px;margin-bottom:48px" class="fade-up">
+      <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:120px;height:120px;border-radius:36px;background:linear-gradient(135deg,var(--pri),#5B4FD6);display:flex;align-items:center;justify-content:center;box-shadow:0 16px 48px rgba(124,111,247,.35)">
+        <svg width="52" height="52" viewBox="0 0 52 52" fill="none"><circle cx="26" cy="26" r="16" stroke="#fff" stroke-width="2.5" opacity=".3"/><path d="M22 22c0-2.2 1.8-4 4-4s4 1.8 4 4-1.8 4-4 4-4-1.8-4-4Z" stroke="#fff" stroke-width="2"/><path d="M18 34V18h16v16" stroke="#fff" stroke-width="2" stroke-linecap="round"/><path d="M22 34v-4h8v4" stroke="#fff" stroke-width="2"/></svg>
+      </div>
+      <div style="position:absolute;top:16px;right:8px;padding:8px 14px;background:var(--s1);border-radius:12px;border:1px solid rgba(255,255,255,.08);display:flex;align-items:center;gap:6px;box-shadow:0 8px 24px rgba(0,0,0,.3)"><span style="font-size:14px">☕</span><span style="font-size:12px;font-weight:600;color:var(--t1)">₹180</span></div>
+      <div style="position:absolute;bottom:24px;left:0;padding:8px 14px;background:var(--s1);border-radius:12px;border:1px solid rgba(255,255,255,.08);display:flex;align-items:center;gap:6px;box-shadow:0 8px 24px rgba(0,0,0,.3)"><span style="font-size:14px">🚕</span><span style="font-size:12px;font-weight:600;color:var(--t1)">₹320</span></div>
+      <div style="position:absolute;top:24px;left:4px;padding:8px 14px;background:var(--s1);border-radius:12px;border:1px solid rgba(255,255,255,.08);display:flex;align-items:center;gap:6px;box-shadow:0 8px 24px rgba(0,0,0,.3)"><span style="font-size:14px">🍛</span><span style="font-size:12px;font-weight:600;color:var(--t1)">₹250</span></div>
+    </div>
+    <div style="text-align:center">
+      <div style="font-size:28px;font-weight:700;color:var(--t1);letter-spacing:-.3px;line-height:1.2">Track every rupee,<br>effortlessly</div>
+      <div style="font-size:15px;color:var(--t3);margin-top:12px;line-height:1.5">Record expenses in seconds. Know exactly where your money goes, every single day.</div>
+    </div>
+  </div>
+  <div style="padding:0 20px 40px;flex-shrink:0">
+    <div style="display:flex;justify-content:center;gap:8px;margin-bottom:24px">
+      <div style="width:24px;height:6px;border-radius:3px;background:var(--pri)"></div>
+      <div style="width:6px;height:6px;border-radius:3px;background:var(--s2)"></div>
+      <div style="width:6px;height:6px;border-radius:3px;background:var(--s2)"></div>
+    </div>
+    <button class="btn btn-primary" onclick="go('scr-onboard2')">Next</button>
+  </div>
+</div>
+
+<!-- ==================== ONBOARDING 2 ==================== -->
+<div class="screen hidden" id="scr-onboard2">
+  <div style="height:44px;padding:14px 24px 0;display:flex;justify-content:flex-end;align-items:center;flex-shrink:0">
+    <span style="font-size:13px;color:var(--pri);font-weight:600;cursor:pointer" onclick="go('scr-home')">Skip</span>
+  </div>
+  <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 40px">
+    <div style="position:relative;width:240px;height:220px;margin-bottom:48px">
+      <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:120px;height:120px;border-radius:36px;background:linear-gradient(135deg,var(--acc),#E67A30);display:flex;align-items:center;justify-content:center;box-shadow:0 16px 48px rgba(255,140,66,.3)">
+        <svg width="52" height="52" viewBox="0 0 52 52" fill="none"><circle cx="18" cy="20" r="8" stroke="#fff" stroke-width="2"/><circle cx="34" cy="20" r="8" stroke="#fff" stroke-width="2"/><path d="M10 40c0-4.4 3.6-8 8-8h4" stroke="#fff" stroke-width="2" stroke-linecap="round"/><path d="M30 32h4c4.4 0 8 3.6 8 8" stroke="#fff" stroke-width="2" stroke-linecap="round"/><path d="M22 36h8M26 32v8" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/></svg>
+      </div>
+      <div style="position:absolute;top:4px;right:0;padding:6px 10px;background:var(--s1);border-radius:10px;border:1px solid rgba(255,255,255,.08);display:flex;gap:4px;align-items:center;box-shadow:0 8px 24px rgba(0,0,0,.3)"><div style="width:18px;height:18px;border-radius:6px;background:var(--pri);display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;color:#fff">K</div><span style="font-size:11px;font-weight:600;color:var(--t1)">₹450</span></div>
+      <div style="position:absolute;bottom:12px;left:0;padding:6px 10px;background:var(--s1);border-radius:10px;border:1px solid rgba(255,255,255,.08);display:flex;gap:4px;align-items:center;box-shadow:0 8px 24px rgba(0,0,0,.3)"><div style="width:18px;height:18px;border-radius:6px;background:var(--acc);display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;color:#fff">R</div><span style="font-size:11px;font-weight:600;color:var(--t1)">₹650</span></div>
+      <div style="position:absolute;bottom:0;right:12px;background:var(--s1);border-radius:10px;padding:4px 8px;border:1px solid rgba(0,214,143,.3)"><span style="font-size:10px;font-weight:600;color:var(--grn)">✔ Fair split</span></div>
+    </div>
+    <div style="text-align:center">
+      <div style="font-size:28px;font-weight:700;color:var(--t1);letter-spacing:-.3px;line-height:1.2">Split bills fairly,<br>not equally</div>
+      <div style="font-size:15px;color:var(--t3);margin-top:12px;line-height:1.5">Everyone pays for what they actually consumed. No more guessing or overpaying.</div>
+    </div>
+  </div>
+  <div style="padding:0 20px 40px;flex-shrink:0">
+    <div style="display:flex;justify-content:center;gap:8px;margin-bottom:24px">
+      <div style="width:6px;height:6px;border-radius:3px;background:var(--s2)"></div>
+      <div style="width:24px;height:6px;border-radius:3px;background:var(--acc)"></div>
+      <div style="width:6px;height:6px;border-radius:3px;background:var(--s2)"></div>
+    </div>
+    <button class="btn" style="background:linear-gradient(135deg,var(--acc),#E67A30);border-radius:16px;padding:16px;text-align:center;font-size:16px;font-weight:700;color:#fff;box-shadow:0 4px 20px rgba(255,140,66,.4);width:100%" onclick="go('scr-onboard3')">Next</button>
+  </div>
+</div>
+
+<!-- ==================== ONBOARDING 3 ==================== -->
+<div class="screen hidden" id="scr-onboard3">
+  <div style="height:44px;flex-shrink:0"></div>
+  <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 40px">
+    <div style="position:relative;width:220px;height:220px;margin-bottom:48px">
+      <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:120px;height:120px;border-radius:36px;background:linear-gradient(135deg,var(--grn),#00B87A);display:flex;align-items:center;justify-content:center;box-shadow:0 16px 48px rgba(0,214,143,.3)">
+        <svg width="52" height="52" viewBox="0 0 52 52" fill="none"><path d="M26 10a12 12 0 0112 12v6l3 4H11l3-4v-6a12 12 0 0112-12Z" stroke="#fff" stroke-width="2.5" fill="none"/><path d="M21 38a5 5 0 0010 0" stroke="#fff" stroke-width="2.5"/><circle cx="36" cy="14" r="4" fill="#FF5757" stroke="#0C0D14" stroke-width="2"/></svg>
+      </div>
+      <div style="position:absolute;top:8px;right:0;padding:8px 12px;background:var(--s1);border-radius:12px;border:1px solid rgba(255,255,255,.08);box-shadow:0 8px 24px rgba(0,0,0,.3)"><div style="font-size:10px;color:var(--red);font-weight:600">Pay Rahul ₹500</div></div>
+      <div style="position:absolute;bottom:20px;left:0;padding:8px 12px;background:var(--s1);border-radius:12px;border:1px solid rgba(255,255,255,.08);box-shadow:0 8px 24px rgba(0,0,0,.3)"><div style="font-size:10px;color:var(--acc);font-weight:600">WiFi bill due</div></div>
+    </div>
+    <div style="text-align:center">
+      <div style="font-size:28px;font-weight:700;color:var(--t1);letter-spacing:-.3px;line-height:1.2">Never miss<br>a payment again</div>
+      <div style="font-size:15px;color:var(--t3);margin-top:12px;line-height:1.5">Get timely reminders for bills, payments, and tasks.</div>
+    </div>
+  </div>
+  <div style="padding:0 20px 40px;flex-shrink:0">
+    <div style="display:flex;justify-content:center;gap:8px;margin-bottom:24px">
+      <div style="width:6px;height:6px;border-radius:3px;background:var(--s2)"></div>
+      <div style="width:6px;height:6px;border-radius:3px;background:var(--s2)"></div>
+      <div style="width:24px;height:6px;border-radius:3px;background:var(--grn)"></div>
+    </div>
+    <button class="btn btn-green" onclick="go('scr-home')">Allow Notifications</button>
+    <div style="text-align:center;margin-top:14px"><span style="font-size:14px;color:var(--t3);cursor:pointer" onclick="go('scr-home')">Maybe later</span></div>
+  </div>
+</div>
+
+<!-- ==================== HOME ==================== -->
+<div class="screen hidden" id="scr-home">
+  <div style="height:44px;flex-shrink:0"></div>
+  <div style="padding:12px 20px 8px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0">
+    <div>
+      <div style="font-size:13px;color:var(--t3);font-weight:500">Good evening</div>
+      <div style="font-size:20px;font-weight:700;color:var(--t1);margin-top:2px">Kartheesan</div>
+    </div>
+    <div style="width:40px;height:40px;border-radius:14px;background:rgba(124,111,247,.18);border:1.5px solid rgba(124,111,247,.4);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:var(--pri);cursor:pointer" onclick="go('scr-settings')">K</div>
+  </div>
+
+  <!-- Balance card -->
+  <div style="margin:8px 20px 0;padding:20px;background:linear-gradient(135deg,var(--s1),#1E2038);border-radius:20px;border:1px solid var(--brd);flex-shrink:0">
+    <div style="font-size:11px;color:var(--t3);font-weight:600;letter-spacing:.06em;text-transform:uppercase">September spending</div>
+    <div style="font-size:34px;font-weight:700;color:var(--t1);margin-top:4px;letter-spacing:-.5px">₹18,650</div>
+    <div style="height:5px;background:var(--s2);border-radius:3px;margin-top:14px;overflow:hidden">
+      <div style="width:74%;height:100%;background:linear-gradient(90deg,var(--pri),var(--acc));border-radius:3px"></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;margin-top:8px">
+      <span style="font-size:11px;color:var(--t3)">74% of ₹25,000 budget</span>
+      <span style="font-size:11px;color:var(--acc);font-weight:600">₹6,350 left</span>
+    </div>
+  </div>
+
+  <!-- Owe/owed -->
+  <div style="display:flex;gap:10px;padding:12px 20px;flex-shrink:0">
+    <div class="card" style="flex:1;padding:14px;border-radius:16px">
+      <div style="font-size:11px;color:var(--t3)">You owe</div>
+      <div style="font-size:20px;font-weight:700;color:var(--red);margin-top:2px">₹780</div>
+      <div style="font-size:11px;color:var(--t3);margin-top:2px">2 friends</div>
+    </div>
+    <div class="card" style="flex:1;padding:14px;border-radius:16px;cursor:pointer" onclick="go('scr-settle')">
+      <div style="font-size:11px;color:var(--t3)">You're owed</div>
+      <div style="font-size:20px;font-weight:700;color:var(--grn);margin-top:2px">₹1,240</div>
+      <div style="font-size:11px;color:var(--t3);margin-top:2px">3 friends →</div>
+    </div>
+  </div>
+
+  <!-- Quick add -->
+  <div style="padding:0 20px 8px;flex-shrink:0">
+    <div style="font-size:11px;font-weight:600;color:var(--t3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px">Quick add</div>
+    <div style="display:flex;gap:8px;overflow-x:auto">
+      <div class="quick-chip" onclick="go('scr-add')"><span>☕</span><span style="font-size:12px;font-weight:600;color:var(--t1)">Coffee ₹180</span></div>
+      <div class="quick-chip" onclick="go('scr-add')"><span>🍛</span><span style="font-size:12px;font-weight:600;color:var(--t1)">Lunch ₹250</span></div>
+      <div class="quick-chip" onclick="go('scr-add')"><span>🚕</span><span style="font-size:12px;font-weight:600;color:var(--t1)">Cab ₹150</span></div>
+      <div class="quick-chip" onclick="go('scr-add')"><span>🛒</span><span style="font-size:12px;font-weight:600;color:var(--t1)">Groceries</span></div>
+    </div>
+  </div>
+
+  <!-- Today -->
+  <div style="padding:4px 20px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0">
+    <span style="font-size:11px;font-weight:600;color:var(--t3);letter-spacing:.06em;text-transform:uppercase">Today</span>
+    <span style="font-size:13px;color:var(--pri);font-weight:500;cursor:pointer" onclick="go('scr-insights')">See all</span>
+  </div>
+
+  <div class="scrollable" style="padding:4px 12px" id="expense-list"></div>
+
+  <!-- FAB -->
+  <div style="position:absolute;right:20px;bottom:84px;width:52px;height:52px;border-radius:16px;background:linear-gradient(135deg,var(--pri),#5B4FD6);display:flex;align-items:center;justify-content:center;box-shadow:0 6px 24px rgba(124,111,247,.5);cursor:pointer;z-index:10" onclick="go('scr-add')">
+    <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M11 4v14M4 11h14" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/></svg>
+  </div>
+
+  <!-- Bottom nav -->
+  <div class="bnav" id="bnav-home"></div>
+</div>
+
+<!-- ==================== ADD EXPENSE ==================== -->
+<div class="screen hidden" id="scr-add">
+  <div style="padding:44px 20px 0;flex-shrink:0">
+    <div style="display:flex;align-items:center;gap:12px;height:48px">
+      <div style="width:36px;height:36px;border-radius:12px;background:var(--s1);display:flex;align-items:center;justify-content:center;cursor:pointer" onclick="go('scr-home')">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M12 4L6 9l6 5" stroke="var(--t2)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <span style="font-size:18px;font-weight:700;color:var(--t1)">Add Expense</span>
+    </div>
+  </div>
+
+  <!-- Amount display -->
+  <div style="padding:24px 20px 16px;text-align:center;flex-shrink:0">
+    <div style="font-size:11px;color:var(--t3);font-weight:600;letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px">Amount</div>
+    <div style="font-size:48px;font-weight:700;color:var(--t1);letter-spacing:-1px" id="amount-display">₹250</div>
+  </div>
+
+  <!-- Categories -->
+  <div style="display:flex;flex-wrap:wrap;gap:8px;padding:0 20px 12px;justify-content:center;flex-shrink:0" id="cat-chips">
+    <div class="cat-chip sel" data-cat="food" onclick="selCat(this)">🍔 Food</div>
+    <div class="cat-chip" data-cat="ride" onclick="selCat(this)">🚕 Ride</div>
+    <div class="cat-chip" data-cat="fun" onclick="selCat(this)">🎬 Fun</div>
+    <div class="cat-chip" data-cat="shop" onclick="selCat(this)">🛍️ Shop</div>
+    <div class="cat-chip" data-cat="bills" onclick="selCat(this)">💳 Bills</div>
+    <div class="cat-chip" data-cat="health" onclick="selCat(this)">💊 Health</div>
+    <div class="cat-chip" data-cat="travel" onclick="selCat(this)">✈️ Travel</div>
+    <div class="cat-chip" data-cat="other" onclick="selCat(this)">📦 Other</div>
+  </div>
+
+  <!-- Share toggle -->
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 20px 12px;flex-shrink:0">
+    <span style="font-size:14px;font-weight:600;color:var(--t1)">Split with group</span>
+    <div class="toggle" id="share-toggle" style="background:var(--s2)" onclick="toggleShare()">
+      <div class="knob" style="left:2px"></div>
+    </div>
+  </div>
+
+  <!-- Numpad -->
+  <div style="flex:1"></div>
+  <div class="numpad" style="padding-bottom:12px">
+    <div class="numkey" onclick="numPress('1')">1</div>
+    <div class="numkey" onclick="numPress('2')">2</div>
+    <div class="numkey" onclick="numPress('3')">3</div>
+    <div class="numkey" onclick="numPress('4')">4</div>
+    <div class="numkey" onclick="numPress('5')">5</div>
+    <div class="numkey" onclick="numPress('6')">6</div>
+    <div class="numkey" onclick="numPress('7')">7</div>
+    <div class="numkey" onclick="numPress('8')">8</div>
+    <div class="numkey" onclick="numPress('9')">9</div>
+    <div class="numkey" onclick="numPress('.')">.</div>
+    <div class="numkey" onclick="numPress('0')">0</div>
+    <div class="numkey" onclick="numPress('del')">⌫</div>
+  </div>
+  <div style="padding:8px 20px 32px;flex-shrink:0">
+    <button class="btn btn-primary" onclick="go('scr-home')">Save Expense</button>
+  </div>
+</div>
+
+<!-- ==================== GROUPS ==================== -->
+<div class="screen hidden" id="scr-groups">
+  <div style="padding:44px 20px 0;flex-shrink:0">
+    <div style="display:flex;justify-content:space-between;align-items:center;height:48px">
+      <div style="font-size:24px;font-weight:700;color:var(--t1)">Groups</div>
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;padding:12px 20px;flex-shrink:0">
+    <div style="padding:8px 16px;border-radius:12px;background:rgba(124,111,247,.15);border:1px solid rgba(124,111,247,.3);font-size:12px;font-weight:600;color:var(--pri)">4 groups</div>
+    <div style="padding:8px 16px;border-radius:12px;background:rgba(0,214,143,.1);border:1px solid rgba(0,214,143,.2);font-size:12px;font-weight:600;color:var(--grn)">Owed ₹1,240</div>
+    <div style="padding:8px 16px;border-radius:12px;background:rgba(255,87,87,.1);border:1px solid rgba(255,87,87,.2);font-size:12px;font-weight:600;color:var(--red)">Owe ₹780</div>
+  </div>
+  <div class="scrollable" style="padding:8px 16px" id="group-list"></div>
+  <div style="position:absolute;right:20px;bottom:84px;padding:14px 20px;border-radius:16px;background:linear-gradient(135deg,var(--pri),#5B4FD6);display:flex;align-items:center;gap:8px;box-shadow:0 6px 24px rgba(124,111,247,.5);cursor:pointer;z-index:10">
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 3v12M3 9h12" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/></svg>
+    <span style="font-size:14px;font-weight:700;color:#fff">New Group</span>
+  </div>
+  <div class="bnav" id="bnav-groups"></div>
+</div>
+
+<!-- ==================== SETTLE UP ==================== -->
+<div class="screen hidden" id="scr-settle">
+  <div style="padding:44px 20px 0;flex-shrink:0">
+    <div style="display:flex;align-items:center;gap:12px;height:48px">
+      <div style="width:36px;height:36px;border-radius:12px;background:var(--s1);display:flex;align-items:center;justify-content:center;cursor:pointer" onclick="go('scr-home')">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M12 4L6 9l6 5" stroke="var(--t2)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <span style="font-size:18px;font-weight:700;color:var(--t1)">Settle Up</span>
+    </div>
+  </div>
+  <div class="scrollable" style="padding:12px 20px" id="settle-list"></div>
+  <div style="padding:12px 20px 32px;flex-shrink:0">
+    <button class="btn btn-green">Remind All (3)</button>
+  </div>
+</div>
+
+<!-- ==================== INSIGHTS ==================== -->
+<div class="screen hidden" id="scr-insights">
+  <div style="padding:44px 20px 0;flex-shrink:0">
+    <div style="display:flex;justify-content:space-between;align-items:center;height:48px">
+      <div style="font-size:24px;font-weight:700;color:var(--t1)">Insights</div>
+      <div style="padding:6px 14px;border-radius:10px;background:var(--s1);font-size:13px;font-weight:600;color:var(--t2)">Sep 2026</div>
+    </div>
+  </div>
+  <div class="scrollable" style="padding:12px 20px" id="insights-content"></div>
+  <div class="bnav" id="bnav-insights"></div>
+</div>
+
+<!-- ==================== SETTINGS ==================== -->
+<div class="screen hidden" id="scr-settings">
+  <div style="padding:44px 20px 0;flex-shrink:0">
+    <div style="display:flex;align-items:center;gap:12px;height:48px">
+      <div style="width:36px;height:36px;border-radius:12px;background:var(--s1);display:flex;align-items:center;justify-content:center;cursor:pointer" onclick="go('scr-home')">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M12 4L6 9l6 5" stroke="var(--t2)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <span style="font-size:18px;font-weight:700;color:var(--t1)">Settings</span>
+    </div>
+  </div>
+  <div class="scrollable" style="padding:16px 20px" id="settings-content"></div>
+</div>
+
+</div><!-- /phone -->
+
+<script>
+// Navigation
+let currentScreen = 'scr-onboard1';
+let history = [];
+
+function go(id) {
+  if (id === currentScreen) return;
+  const prev = document.getElementById(currentScreen);
+  const next = document.getElementById(id);
+  history.push(currentScreen);
+  prev.classList.remove('active');
+  prev.classList.add('hidden-left');
+  next.classList.remove('hidden','hidden-left');
+  next.classList.add('active');
+  currentScreen = id;
+  updateNav();
+}
+
+function goBack() {
+  if (!history.length) return;
+  const prev = document.getElementById(currentScreen);
+  const id = history.pop();
+  const next = document.getElementById(id);
+  prev.classList.remove('active');
+  prev.classList.add('hidden');
+  next.classList.remove('hidden','hidden-left');
+  next.classList.add('active');
+  currentScreen = id;
+  updateNav();
+}
+
+// Bottom nav
+const navTabs = [
+  {id:'home',label:'Home',screen:'scr-home',icon:'<path d="M3 9L10 3l7 6v8a1 1 0 01-1 1H4a1 1 0 01-1-1V9Z" stroke="CL" stroke-width="1.5" fill="none"/><path d="M7.5 18v-5h5v5" stroke="CL" stroke-width="1.5"/>'},
+  {id:'money',label:'Money',screen:'scr-add',icon:'<rect x="2" y="5" width="16" height="12" rx="2" stroke="CL" stroke-width="1.5"/><circle cx="10" cy="11" r="2.5" stroke="CL" stroke-width="1.5"/>'},
+  {id:'groups',label:'Groups',screen:'scr-groups',icon:'<circle cx="7" cy="7" r="3" stroke="CL" stroke-width="1.5"/><path d="M1 17c0-3.3 2.7-6 6-6s6 2.7 6 6" stroke="CL" stroke-width="1.5" stroke-linecap="round"/><circle cx="15" cy="8" r="2.5" stroke="CL" stroke-width="1.5"/>'},
+  {id:'remind',label:'Remind',screen:'scr-settle',icon:'<path d="M10 2a6 6 0 016 6v3l1.5 2.5H2.5L4 11V8a6 6 0 016-6Z" stroke="CL" stroke-width="1.5" fill="none"/><path d="M7.5 16a2.5 2.5 0 005 0" stroke="CL" stroke-width="1.5"/>'},
+  {id:'insights',label:'Insights',screen:'scr-insights',icon:'<rect x="2" y="12" width="4" height="6" rx="1" stroke="CL" stroke-width="1.5"/><rect x="8" y="8" width="4" height="10" rx="1" stroke="CL" stroke-width="1.5"/><rect x="14" y="4" width="4" height="14" rx="1" stroke="CL" stroke-width="1.5"/>'},
+];
+const navScreenMap = {'scr-home':'home','scr-add':'money','scr-groups':'groups','scr-settle':'remind','scr-insights':'insights','scr-settings':'home'};
+
+function buildNav(containerId) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  const active = navScreenMap[currentScreen] || 'home';
+  el.innerHTML = navTabs.map(t => {
+    const isActive = t.id === active;
+    const c = isActive ? '#7C6FF7' : '#595B73';
+    const fw = isActive ? '600' : '400';
+    const bg = isActive ? 'rgba(124,111,247,.18)' : 'transparent';
+    const svg = t.icon.replace(/CL/g, c);
+    return `<div class="bnav-item" onclick="go('${t.screen}')">
+      <div style="padding:4px;border-radius:10px;background:${bg}"><svg width="20" height="20" viewBox="0 0 20 20" fill="none">${svg}</svg></div>
+      <span style="font-size:10px;font-weight:${fw};color:${c}">${t.label}</span>
+    </div>`;
+  }).join('');
+}
+
+function updateNav() {
+  ['bnav-home','bnav-groups','bnav-insights'].forEach(buildNav);
+}
+
+// Numpad
+let amount = '250';
+function numPress(k) {
+  if (k === 'del') { amount = amount.slice(0,-1) || '0'; }
+  else if (k === '.' && amount.includes('.')) return;
+  else { if (amount === '0' && k !== '.') amount = ''; amount += k; }
+  document.getElementById('amount-display').textContent = '₹' + Number(amount||0).toLocaleString('en-IN',{maximumFractionDigits:2});
+}
+
+// Category selection
+function selCat(el) {
+  document.querySelectorAll('.cat-chip').forEach(c => c.classList.remove('sel'));
+  el.classList.add('sel');
+}
+
+// Share toggle
+let shared = false;
+function toggleShare() {
+  shared = !shared;
+  const t = document.getElementById('share-toggle');
+  const k = t.querySelector('.knob');
+  t.style.background = shared ? 'var(--pri)' : 'var(--s2)';
+  k.style.left = shared ? '22px' : '2px';
+}
+
+// Populate expenses
+function populateExpenses() {
+  const exps = [
+    {icon:'☕',bg:'rgba(255,178,69,.15)',name:'Morning Coffee',sub:'Food · UPI',amt:'−₹180',time:'9:15 AM'},
+    {icon:'🍛',bg:'rgba(0,214,143,.12)',name:'Lunch',sub:'Food · Cash',amt:'−₹320',time:'1:10 PM'},
+    {icon:'🚕',bg:'rgba(124,111,247,.15)',name:'Uber',sub:'Transport · UPI',amt:'−₹280',time:'5:30 PM'},
+  ];
+  document.getElementById('expense-list').innerHTML = exps.map(e => `
+    <div style="display:flex;align-items:center;gap:12px;padding:10px 8px;border-radius:14px">
+      <div style="width:42px;height:42px;border-radius:13px;background:${e.bg};display:flex;align-items:center;justify-content:center;font-size:20px">${e.icon}</div>
+      <div style="flex:1"><div style="font-size:14px;font-weight:600;color:var(--t1)">${e.name}</div><div style="font-size:12px;color:var(--t3);margin-top:1px">${e.sub}</div></div>
+      <div style="text-align:right"><div style="font-size:14px;font-weight:700;color:var(--t1)">${e.amt}</div><div style="font-size:11px;color:var(--t3);margin-top:1px">${e.time}</div></div>
+    </div>`).join('');
+}
+
+// Populate groups
+function populateGroups() {
+  const groups = [
+    {name:'Weekend Trip',emoji:'🏕️',bg:'linear-gradient(135deg,var(--pri),#5B4FD6)',members:'4 members · Today',amt:'+₹1,080',amtC:'var(--grn)',label:'owed to you',avatars:[{l:'K',c:'var(--pri)'},{l:'R',c:'var(--acc)'},{l:'A',c:'var(--grn)'},{l:'V',c:'var(--red)'}]},
+    {name:'Roommates',emoji:'🏠',bg:'linear-gradient(135deg,var(--acc),#E67A30)',members:'3 members · 2 days ago',amt:'−₹450',amtC:'var(--red)',label:'you owe',avatars:[{l:'K',c:'var(--pri)'},{l:'S',c:'#3B82F6'},{l:'P',c:'#A855F7'}]},
+    {name:'Lunch Crew',emoji:'🍜',bg:'linear-gradient(135deg,var(--grn),#00B87A)',members:'5 members · 4 days ago',amt:'+₹160',amtC:'var(--grn)',label:'owed to you',avatars:[{l:'K',c:'var(--pri)'},{l:'R',c:'var(--acc)'},{l:'N',c:'#EC4899'}]},
+  ];
+  document.getElementById('group-list').innerHTML = groups.map(g => `
+    <div class="card" style="padding:16px;margin-bottom:10px;cursor:pointer" onclick="go('scr-settle')">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+        <div style="width:46px;height:46px;border-radius:15px;background:${g.bg};display:flex;align-items:center;justify-content:center;font-size:22px">${g.emoji}</div>
+        <div style="flex:1"><div style="font-size:16px;font-weight:700;color:var(--t1)">${g.name}</div><div style="font-size:12px;color:var(--t3);margin-top:2px">${g.members}</div></div>
+        <div style="text-align:right"><div style="font-size:14px;font-weight:700;color:${g.amtC}">${g.amt}</div><div style="font-size:10px;color:var(--t3)">${g.label}</div></div>
+      </div>
+      <div style="display:flex">${g.avatars.map((a,i) => `<div style="width:24px;height:24px;border-radius:8px;background:${a.c};display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;border:2px solid var(--s1);${i?'margin-left:-4px':''}">${a.l}</div>`).join('')}</div>
+    </div>`).join('');
+}
+
+// Populate settlements
+function populateSettle() {
+  const people = [
+    {name:'Rahul',letter:'R',color:'var(--acc)',amt:'₹580',days:'3 days',expanded:true},
+    {name:'Arjun',letter:'A',color:'var(--grn)',amt:'₹320',days:'5 days',expanded:false},
+    {name:'Vivek',letter:'V',color:'var(--red)',amt:'₹180',days:'1 day',expanded:false},
+  ];
+  document.getElementById('settle-list').innerHTML = `
+    <div class="card" style="padding:16px;margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+        <div style="width:38px;height:38px;border-radius:12px;background:linear-gradient(135deg,var(--pri),#5B4FD6);display:flex;align-items:center;justify-content:center;font-size:18px">🏕️</div>
+        <div><div style="font-size:15px;font-weight:700;color:var(--t1)">Weekend Trip</div><div style="font-size:11px;color:var(--t3)">4 members · 5 → 3 transactions</div></div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <div style="flex:1;background:var(--s2);border-radius:12px;padding:10px;text-align:center"><div style="font-size:10px;color:var(--t3);margin-bottom:2px">You're owed</div><div style="font-size:16px;font-weight:700;color:var(--grn)">₹1,080</div></div>
+        <div style="flex:1;background:var(--s2);border-radius:12px;padding:10px;text-align:center"><div style="font-size:10px;color:var(--t3);margin-bottom:2px">Settled</div><div style="font-size:16px;font-weight:700;color:var(--pri)">0 / 3</div></div>
+      </div>
+    </div>` +
+    people.map(p => `
+    <div class="card" style="padding:14px 16px;margin-bottom:10px;${p.expanded?'border-color:rgba(124,111,247,.2)':''}">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+        <div style="width:42px;height:42px;border-radius:14px;background:${p.color};display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:#fff">${p.letter}</div>
+        <div style="flex:1"><div style="font-size:15px;font-weight:600;color:var(--t1)">${p.name} owes you</div><div style="font-size:11px;color:var(--t3)">${p.days} pending</div></div>
+        <div style="font-size:20px;font-weight:700;color:var(--grn)">${p.amt}</div>
+      </div>
+      ${p.expanded ? `<div style="background:var(--s2);border-radius:14px;padding:12px;margin-bottom:10px">
+        <div style="font-size:10px;font-weight:600;color:var(--t3);letter-spacing:.04em;text-transform:uppercase;margin-bottom:8px">Request via UPI</div>
+        <div style="display:flex;gap:8px">
+          <div class="upi-btn"><div style="width:28px;height:28px;border-radius:8px;background:#fff;display:flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 18 18"><path d="M5.2 3L8.5 15l2.8-7.5L15 3" fill="none" stroke="#4285F4" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></div><span style="font-size:10px;font-weight:600;color:var(--t2)">GPay</span></div>
+          <div class="upi-btn"><div style="width:28px;height:28px;border-radius:8px;background:#5F259F;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff">Pe</div><span style="font-size:10px;font-weight:600;color:var(--t2)">PhonePe</span></div>
+          <div class="upi-btn"><div style="width:28px;height:28px;border-radius:8px;background:#00B9F1;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff">Ptm</div><span style="font-size:10px;font-weight:600;color:var(--t2)">Paytm</span></div>
+          <div class="upi-btn"><div style="width:28px;height:28px;border-radius:8px;background:var(--s2);display:flex;align-items:center;justify-content:center"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 7h8M7 3v8" stroke="var(--t3)" stroke-width="1.5" stroke-linecap="round"/></svg></div><span style="font-size:10px;font-weight:600;color:var(--t3)">Other</span></div>
+        </div>
+      </div>` : ''}
+      <div style="display:flex;gap:8px">
+        ${!p.expanded?'<div style="flex:1;padding:10px;border-radius:12px;background:rgba(124,111,247,.12);text-align:center;font-size:12px;font-weight:600;color:var(--pri);cursor:pointer">⇧ Pay via UPI</div>':''}
+        <div style="flex:1;padding:10px;border-radius:12px;background:var(--s2);text-align:center;font-size:12px;font-weight:600;color:var(--acc);cursor:pointer">Remind</div>
+        <div style="flex:1;padding:10px;border-radius:12px;background:rgba(0,214,143,.15);text-align:center;font-size:12px;font-weight:600;color:var(--grn);cursor:pointer">Mark Paid</div>
+      </div>
+    </div>`).join('') +
+    `<div style="background:var(--s2);border-radius:14px;padding:12px 14px;display:flex;align-items:start;gap:10px;margin-top:4px">
+      <span style="font-size:14px;flex-shrink:0;margin-top:1px">ℹ️</span>
+      <span style="font-size:12px;color:var(--t3);line-height:1.5">Settlements optimised: 5 original → 3 simplified. UPI links open your payment app with the amount pre-filled.</span>
+    </div>`;
+}
+
+// Populate insights
+function populateInsights() {
+  const cats = [
+    {emoji:'🍔',name:'Food',amt:'₹6,200',pct:100,color:'var(--acc)'},
+    {emoji:'🚕',name:'Transport',amt:'₹4,800',pct:77,color:'var(--pri)'},
+    {emoji:'💳',name:'Bills',amt:'₹3,450',pct:56,color:'var(--grn)'},
+    {emoji:'🎬',name:'Entertainment',amt:'₹2,400',pct:39,color:'var(--red)'},
+    {emoji:'🛍️',name:'Shopping',amt:'₹1,800',pct:29,color:'#3B82F6'},
+  ];
+  document.getElementById('insights-content').innerHTML = `
+    <div style="background:linear-gradient(135deg,rgba(124,111,247,.2),rgba(124,111,247,.05));border-radius:20px;padding:20px;border:1px solid rgba(124,111,247,.2);margin-bottom:16px">
+      <div style="font-size:12px;color:var(--t2);margin-bottom:4px">Total spent this month</div>
+      <div style="font-size:32px;font-weight:700;color:var(--t1)">₹18,650</div>
+      <div style="display:flex;align-items:center;gap:4px;margin-top:6px">
+        <span style="font-size:12px;color:var(--red);font-weight:600">↑ 12% more</span>
+        <span style="font-size:12px;color:var(--t3)">than last month</span>
+      </div>
+      <div style="margin-top:14px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:11px;color:var(--t3)">Budget used</span><span style="font-size:11px;color:var(--t2);font-weight:600">74%</span></div>
+        <div style="height:6px;border-radius:3px;background:var(--s2);overflow:hidden"><div style="width:74%;height:100%;border-radius:3px;background:linear-gradient(90deg,var(--pri),var(--acc))"></div></div>
+      </div>
+    </div>
+    <div style="font-size:11px;font-weight:600;color:var(--t3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:10px">By category</div>
+    <div class="card" style="padding:16px;margin-bottom:16px">
+      ${cats.map(c => `<div style="margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <div style="display:flex;align-items:center;gap:8px"><span style="font-size:16px">${c.emoji}</span><span style="font-size:13px;font-weight:600;color:var(--t1)">${c.name}</span></div>
+          <span style="font-size:13px;font-weight:700;color:var(--t1)">${c.amt}</span>
+        </div>
+        <div style="height:6px;border-radius:3px;background:var(--s2);overflow:hidden"><div style="width:${c.pct}%;height:100%;border-radius:3px;background:${c.color}"></div></div>
+      </div>`).join('')}
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:20px">
+      <div class="card" style="flex:1;padding:14px;text-align:center;border-radius:16px"><div style="font-size:10px;color:var(--t3);margin-bottom:4px">Daily avg</div><div style="font-size:18px;font-weight:700;color:var(--t1)">₹888</div></div>
+      <div class="card" style="flex:1;padding:14px;text-align:center;border-radius:16px"><div style="font-size:10px;color:var(--t3);margin-bottom:4px">Transactions</div><div style="font-size:18px;font-weight:700;color:var(--t1)">47</div></div>
+      <div class="card" style="flex:1;padding:14px;text-align:center;border-radius:16px"><div style="font-size:10px;color:var(--t3);margin-bottom:4px">Top category</div><div style="font-size:18px">🍔</div></div>
+    </div>`;
+}
+
+// Populate settings
+function populateSettings() {
+  document.getElementById('settings-content').innerHTML = `
+    <div class="card" style="padding:20px;border-radius:20px;margin-bottom:20px;display:flex;align-items:center;gap:14px">
+      <div style="width:56px;height:56px;border-radius:18px;background:linear-gradient(135deg,var(--pri),#5B4FD6);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;color:#fff">K</div>
+      <div style="flex:1"><div style="font-size:18px;font-weight:700;color:var(--t1)">Kartheesan</div><div style="display:flex;align-items:center;gap:6px;margin-top:4px"><span style="font-size:12px;color:var(--t3)">kartheesan@email.com</span><span style="background:rgba(0,214,143,.15);color:var(--grn);font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px">VERIFIED</span></div></div>
+    </div>
+    <div style="font-size:11px;font-weight:600;color:var(--t3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:10px">Preferences</div>
+    <div class="card" style="border-radius:16px;margin-bottom:20px;padding:0;overflow:hidden">
+      <div style="padding:14px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,.04)">
+        <div style="display:flex;align-items:center;gap:10px"><div style="width:32px;height:32px;border-radius:10px;background:rgba(124,111,247,.15);display:flex;align-items:center;justify-content:center;font-size:15px">₹</div><span style="font-size:14px;font-weight:500;color:var(--t1)">Currency</span></div>
+        <span style="font-size:13px;color:var(--t3)">INR (₹) ›</span>
+      </div>
+      <div style="padding:14px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,.04)">
+        <div style="display:flex;align-items:center;gap:10px"><div style="width:32px;height:32px;border-radius:10px;background:rgba(255,140,66,.15);display:flex;align-items:center;justify-content:center">🔔</div><span style="font-size:14px;font-weight:500;color:var(--t1)">Notifications</span></div>
+        <div class="toggle" style="background:var(--pri)"><div class="knob" style="left:22px"></div></div>
+      </div>
+      <div style="padding:14px 16px;display:flex;align-items:center;justify-content:space-between">
+        <div style="display:flex;align-items:center;gap:10px"><div style="width:32px;height:32px;border-radius:10px;background:rgba(0,214,143,.15);display:flex;align-items:center;justify-content:center">💰</div><span style="font-size:14px;font-weight:500;color:var(--t1)">Monthly budget</span></div>
+        <span style="font-size:13px;color:var(--t3)">₹25,000 ›</span>
+      </div>
+    </div>
+    <div class="card" style="border-radius:16px;margin-bottom:20px;padding:14px 16px;display:flex;align-items:center;gap:10px;cursor:pointer">
+      <div style="width:32px;height:32px;border-radius:10px;background:rgba(255,140,66,.1);display:flex;align-items:center;justify-content:center">🚪</div>
+      <span style="font-size:14px;font-weight:600;color:var(--acc)">Log out</span>
+    </div>
+    <div style="text-align:center;margin-top:20px"><div style="font-size:11px;color:var(--t3)">Penny v1.0.0</div></div>`;
+}
+
+// Init
+populateExpenses();
+populateGroups();
+populateSettle();
+populateInsights();
+populateSettings();
+updateNav();
+</script>
+</body>
+</html>

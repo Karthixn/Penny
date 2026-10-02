@@ -1,0 +1,249 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(uuid()) @db.Uuid
+  email         String    @unique
+  passwordHash  String    @map("password_hash")
+  displayName   String?   @map("display_name")
+  currency      String    @default("INR")
+  monthlyBudget Int       @default(2500000) @map("monthly_budget") // in paise
+  isEmailVerified Boolean @default(false) @map("is_email_verified")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  deletedAt     DateTime? @map("deleted_at")
+
+  otpTokens      OtpToken[]
+  refreshTokens  RefreshToken[]
+  pushTokens     PushToken[]
+  createdGroups  Group[]          @relation("CreatedGroups")
+  memberships    GroupMember[]
+  invitesSent    GroupInvitation[]
+  createdExpenses Expense[]
+  expensePayers  ExpensePayer[]
+  expenseSplits  ExpenseSplit[]
+  itemAssignees  ExpenseItemAssignee[]
+  settlementsPaid   Settlement[] @relation("SettlementPayer")
+  settlementsReceived Settlement[] @relation("SettlementPayee")
+  reminders      Reminder[]
+  syncQueue      SyncQueue[]
+
+  @@map("users")
+}
+
+model OtpToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  otpHash   String   @map("otp_hash")
+  purpose   String   // "email_verify" | "password_reset"
+  attempts  Int      @default(0)
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("otp_tokens")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  tokenHash String   @map("token_hash")
+  family    String   @db.Uuid
+  isRevoked Boolean  @default(false) @map("is_revoked")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("refresh_tokens")
+}
+
+model PushToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  token     String
+  platform  String   // "android" | "ios"
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([userId, token])
+  @@map("push_tokens")
+}
+
+model Group {
+  id         String    @id @default(uuid()) @db.Uuid
+  name       String
+  emoji      String?
+  createdBy  String    @map("created_by") @db.Uuid
+  settledAt  DateTime? @map("settled_at")
+  archivedAt DateTime? @map("archived_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  creator     User             @relation("CreatedGroups", fields: [createdBy], references: [id])
+  members     GroupMember[]
+  invitations GroupInvitation[]
+  expenses    Expense[]
+  settlements Settlement[]
+
+  @@map("groups")
+}
+
+model GroupMember {
+  id       String    @id @default(uuid()) @db.Uuid
+  groupId  String    @map("group_id") @db.Uuid
+  userId   String    @map("user_id") @db.Uuid
+  role     String    @default("member") // "admin" | "member"
+  joinedAt DateTime  @default(now()) @map("joined_at")
+  leftAt   DateTime? @map("left_at")
+
+  group Group @relation(fields: [groupId], references: [id])
+  user  User  @relation(fields: [userId], references: [id])
+
+  @@unique([groupId, userId])
+  @@map("group_members")
+}
+
+model GroupInvitation {
+  id         String    @id @default(uuid()) @db.Uuid
+  groupId    String    @map("group_id") @db.Uuid
+  invitedBy  String    @map("invited_by") @db.Uuid
+  inviteCode String    @unique @map("invite_code")
+  expiresAt  DateTime  @map("expires_at")
+  usedAt     DateTime? @map("used_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  group   Group @relation(fields: [groupId], references: [id])
+  inviter User  @relation(fields: [invitedBy], references: [id])
+
+  @@map("group_invitations")
+}
+
+model Expense {
+  id          String    @id @default(uuid()) @db.Uuid
+  groupId     String?   @map("group_id") @db.Uuid
+  description String
+  totalAmount Int       @map("total_amount") // paise
+  category    String    @default("other")
+  date        DateTime  @default(now())
+  createdBy   String    @map("created_by") @db.Uuid
+  clientId    String?   @unique @map("client_id") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  group   Group?         @relation(fields: [groupId], references: [id])
+  creator User           @relation(fields: [createdBy], references: [id])
+  payers  ExpensePayer[]
+  splits  ExpenseSplit[]
+  items   ExpenseItem[]
+
+  @@map("expenses")
+}
+
+model ExpensePayer {
+  id        String @id @default(uuid()) @db.Uuid
+  expenseId String @map("expense_id") @db.Uuid
+  userId    String @map("user_id") @db.Uuid
+  amount    Int    // paise
+
+  expense Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@unique([expenseId, userId])
+  @@map("expense_payers")
+}
+
+model ExpenseSplit {
+  id          String @id @default(uuid()) @db.Uuid
+  expenseId   String @map("expense_id") @db.Uuid
+  userId      String @map("user_id") @db.Uuid
+  amount      Int    // paise
+  splitMethod String @map("split_method") // "equal" | "exact" | "percentage" | "item"
+
+  expense Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@unique([expenseId, userId])
+  @@map("expense_splits")
+}
+
+model ExpenseItem {
+  id        String @id @default(uuid()) @db.Uuid
+  expenseId String @map("expense_id") @db.Uuid
+  name      String
+  amount    Int    // paise
+
+  expense   Expense               @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  assignees ExpenseItemAssignee[]
+
+  @@map("expense_items")
+}
+
+model ExpenseItemAssignee {
+  id     String @id @default(uuid()) @db.Uuid
+  itemId String @map("item_id") @db.Uuid
+  userId String @map("user_id") @db.Uuid
+
+  item ExpenseItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  user User        @relation(fields: [userId], references: [id])
+
+  @@unique([itemId, userId])
+  @@map("expense_item_assignees")
+}
+
+model Settlement {
+  id        String    @id @default(uuid()) @db.Uuid
+  groupId   String    @map("group_id") @db.Uuid
+  payerId   String    @map("payer_id") @db.Uuid
+  payeeId   String    @map("payee_id") @db.Uuid
+  amount    Int       // paise
+  settledAt DateTime? @map("settled_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  group Group @relation(fields: [groupId], references: [id])
+  payer User  @relation("SettlementPayer", fields: [payerId], references: [id])
+  payee User  @relation("SettlementPayee", fields: [payeeId], references: [id])
+
+  @@map("settlements")
+}
+
+model Reminder {
+  id             String    @id @default(uuid()) @db.Uuid
+  userId         String    @map("user_id") @db.Uuid
+  title          String
+  amount         Int?      // paise, optional
+  dueDate        DateTime  @map("due_date")
+  isRecurring    Boolean   @default(false) @map("is_recurring")
+  recurrenceRule String?   @map("recurrence_rule")
+  completedAt    DateTime? @map("completed_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("reminders")
+}
+
+model SyncQueue {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  entityType String    @map("entity_type")
+  entityId   String    @map("entity_id") @db.Uuid
+  action     String    // "create" | "update" | "delete"
+  payload    Json
+  syncedAt   DateTime? @map("synced_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("sync_queue")
+}
