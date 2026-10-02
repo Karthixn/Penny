@@ -56,7 +56,9 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
         );
     if (success && mounted) {
       final state = ref.read(authProvider);
-      if (state.status == AuthStatus.awaitingVerification) {
+      if (state.status == AuthStatus.authenticated) {
+        context.go('/home');
+      } else if (state.status == AuthStatus.awaitingVerification) {
         context.go('/verify-otp?email=${Uri.encodeComponent(email)}');
       }
     }
@@ -67,6 +69,10 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     final auth = ref.watch(authProvider);
 
     ref.listen<AuthState>(authProvider, (_, state) {
+      if (state.status == AuthStatus.authenticated) {
+        context.go('/home');
+        return;
+      }
       if (state.status == AuthStatus.awaitingVerification && state.pendingEmail != null) {
         context.go('/verify-otp?email=${Uri.encodeComponent(state.pendingEmail!)}');
         return;

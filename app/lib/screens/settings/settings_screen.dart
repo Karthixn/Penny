@@ -82,6 +82,147 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
+  void _startEmailVerification(String email) async {
+    try {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(
+          child: CircularProgressIndicator(color: Color(0xFFF2994A)),
+        ),
+      );
+
+      await ref.read(authApiProvider).sendOtp(email: email);
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop(); // dismiss loading
+
+      _showOtpVerificationSheet(email);
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to request verification code: $e'), backgroundColor: AppColors.red),
+      );
+    }
+  }
+
+  void _showOtpVerificationSheet(String email) {
+    final otpController = TextEditingController();
+    bool isVerifying = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF1E1E24),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) => Padding(
+          padding: EdgeInsets.only(
+            left: 24,
+            right: 24,
+            top: 20,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
+              ),
+              const SizedBox(height: 18),
+              const Icon(Icons.mark_email_read_outlined, color: Color(0xFFF2994A), size: 40),
+              const SizedBox(height: 12),
+              const Text(
+                'Verify Email Address',
+                style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Enter the 6-digit code sent to\n$email',
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white70, fontSize: 13),
+              ),
+              const SizedBox(height: 20),
+              TextField(
+                controller: otpController,
+                keyboardType: TextInputType.number,
+                textAlign: TextAlign.center,
+                maxLength: 6,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 26,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 8,
+                ),
+                decoration: InputDecoration(
+                  counterText: '',
+                  hintText: '••••••',
+                  hintStyle: const TextStyle(color: Colors.white24, letterSpacing: 8),
+                  filled: true,
+                  fillColor: const Color(0xFF2C2C34),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+                ),
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFF2994A),
+                  minimumSize: const Size(double.infinity, 50),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+                onPressed: isVerifying
+                    ? null
+                    : () async {
+                        final code = otpController.text.trim();
+                        if (code.length != 6) return;
+                        setModalState(() => isVerifying = true);
+                        try {
+                          await ref.read(authApiProvider).verifyOtp(email: email, otp: code);
+                          if (ctx.mounted) Navigator.pop(ctx);
+                          if (!mounted) return;
+                          ref.read(userProvider.notifier).loadProfile();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Email verified successfully! 🎉'),
+                              backgroundColor: Color(0xFF4CAF50),
+                            ),
+                          );
+                        } catch (err) {
+                          setModalState(() => isVerifying = false);
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Verification failed: $err'), backgroundColor: AppColors.red),
+                          );
+                        }
+                      },
+                child: isVerifying
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                    : const Text('Confirm Verification', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 16)),
+              ),
+              const SizedBox(height: 12),
+              TextButton(
+                onPressed: () async {
+                  try {
+                    await ref.read(authApiProvider).sendOtp(email: email);
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('New code sent!'), backgroundColor: Color(0xFF4CAF50)),
+                    );
+                  } catch (_) {}
+                },
+                child: const Text('Resend Code', style: TextStyle(color: Color(0xFFF2994A))),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   void _showDeleteAccount() {
     showDialog(
       context: context,
@@ -114,6 +255,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final name = profile?['displayName'] as String? ?? '';
     final email = profile?['email'] as String? ?? '';
     final budget = profile?['monthlyBudget'] as int?;
+    final isEmailVerified = profile?['isEmailVerified'] as bool? ?? false;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
@@ -149,6 +291,43 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                 style: const TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.w600)),
                             const SizedBox(height: 4),
                             Text(email, style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                            const SizedBox(height: 6),
+                            if (isEmailVerified)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF4CAF50).withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.check_circle_rounded, color: Color(0xFF4CAF50), size: 13),
+                                    SizedBox(width: 4),
+                                    Text('Email Verified', style: TextStyle(color: Color(0xFF4CAF50), fontSize: 11, fontWeight: FontWeight.bold)),
+                                  ],
+                                ),
+                              )
+                            else
+                              InkWell(
+                                onTap: () => _startEmailVerification(email),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF2994A).withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: const Color(0xFFF2994A).withValues(alpha: 0.4)),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.shield_outlined, color: Color(0xFFF2994A), size: 12),
+                                      SizedBox(width: 4),
+                                      Text('Unverified • Verify Email', style: TextStyle(color: Color(0xFFF2994A), fontSize: 11, fontWeight: FontWeight.w600)),
+                                    ],
+                                  ),
+                                ),
+                              ),
                           ],
                         ),
                       ),
@@ -159,6 +338,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
                 const Text('Account', style: TextStyle(color: AppColors.textTertiary, fontSize: 12, fontWeight: FontWeight.w600, letterSpacing: 1)),
                 const SizedBox(height: 8),
+                _SettingsTile(
+                  icon: isEmailVerified ? Icons.mark_email_read_outlined : Icons.mark_email_unread_outlined,
+                  title: 'Email Verification',
+                  subtitle: isEmailVerified ? 'Verified' : 'Verify for data recovery',
+                  trailing: isEmailVerified
+                      ? const Icon(Icons.check_circle_rounded, color: Color(0xFF4CAF50), size: 20)
+                      : Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF2994A),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Text('Verify', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 12)),
+                        ),
+                  onTap: isEmailVerified ? () {} : () => _startEmailVerification(email),
+                ),
                 _SettingsTile(
                   icon: Icons.person_outline,
                   title: 'Display Name',
@@ -230,13 +425,15 @@ class _SettingsTile extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
+  final Widget? trailing;
 
   const _SettingsTile({
     required this.icon,
     required this.title,
     required this.subtitle,
-    required this.onTap,
+    this.onTap,
+    this.trailing,
   });
 
   @override
@@ -258,9 +455,13 @@ class _SettingsTile extends StatelessWidget {
                 Expanded(
                   child: Text(title, style: const TextStyle(color: AppColors.textPrimary, fontSize: 15)),
                 ),
-                Text(subtitle, style: const TextStyle(color: AppColors.textTertiary, fontSize: 13)),
-                const SizedBox(width: 4),
-                const Icon(Icons.chevron_right, color: AppColors.textTertiary, size: 20),
+                if (trailing != null)
+                  trailing!
+                else ...[
+                  Text(subtitle, style: const TextStyle(color: AppColors.textTertiary, fontSize: 13)),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.chevron_right, color: AppColors.textTertiary, size: 20),
+                ],
               ],
             ),
           ),

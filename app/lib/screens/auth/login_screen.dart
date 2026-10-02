@@ -41,6 +41,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final auth = ref.watch(authProvider);
 
     ref.listen<AuthState>(authProvider, (_, state) {
+      if (state.status == AuthStatus.authenticated) {
+        context.go('/home');
+        return;
+      }
       if (state.status == AuthStatus.awaitingVerification && state.pendingEmail != null) {
         context.go('/verify-otp?email=${Uri.encodeComponent(state.pendingEmail!)}');
         return;
