@@ -15,11 +15,14 @@ class ExpensesApi {
     int page = 1,
     int limit = 20,
   }) async {
-    final response = await _client.dio.get('/expenses', queryParameters: {
+    final query = <String, dynamic>{
       'page': page,
       'limit': limit,
-      'groupId': ?groupId,
-    });
+    };
+    if (groupId != null) {
+      query['groupId'] = groupId;
+    }
+    final response = await _client.dio.get('/expenses', queryParameters: query);
     return response.data as Map<String, dynamic>;
   }
 

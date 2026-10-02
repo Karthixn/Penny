@@ -21,7 +21,7 @@ class ExpenseListState {
 class ExpenseListNotifier extends Notifier<ExpenseListState> {
   @override
   ExpenseListState build() {
-    loadExpenses();
+    Future.microtask(() => loadExpenses());
     return const ExpenseListState(isLoading: true);
   }
 
@@ -29,12 +29,21 @@ class ExpenseListNotifier extends Notifier<ExpenseListState> {
     state = ExpenseListState(expenses: state.expenses, isLoading: true);
     try {
       final result = await ref.read(expensesApiProvider).list(page: page);
-      final data = (result['data'] as List).cast<Map<String, dynamic>>();
-      state = ExpenseListState(expenses: data);
+      final rawData = result['data'];
+      final List<Map<String, dynamic>> list = [];
+      if (rawData is List) {
+        for (final item in rawData) {
+          if (item is Map) {
+            list.add(Map<String, dynamic>.from(item));
+          }
+        }
+      }
+      state = ExpenseListState(expenses: list, isLoading: false);
     } catch (e) {
       state = ExpenseListState(
         expenses: state.expenses,
         error: e.toString(),
+        isLoading: false,
       );
     }
   }
@@ -71,7 +80,7 @@ class MonthlyStatsNotifier extends Notifier<MonthlyStatsState> {
   @override
   MonthlyStatsState build() {
     final now = DateTime.now();
-    loadStats(now.year, now.month);
+    Future.microtask(() => loadStats(now.year, now.month));
     return const MonthlyStatsState(isLoading: true);
   }
 
@@ -83,15 +92,27 @@ class MonthlyStatsNotifier extends Notifier<MonthlyStatsState> {
     );
     try {
       final result = await ref.read(expensesApiProvider).getStats(year, month);
+      final rawSpent = result['totalSpent'];
+      final totalSpent = rawSpent is num ? rawSpent.toInt() : 0;
+      final rawCategories = result['byCategory'];
+      final Map<String, int> categories = {};
+      if (rawCategories is Map) {
+        for (final entry in rawCategories.entries) {
+          if (entry.value is num) {
+            categories[entry.key.toString()] = (entry.value as num).toInt();
+          }
+        }
+      }
       state = MonthlyStatsState(
-        totalSpent: result['totalSpent'] as int,
-        byCategory: (result['byCategory'] as Map<String, dynamic>)
-            .map((k, v) => MapEntry(k, v as int)),
+        totalSpent: totalSpent,
+        byCategory: categories,
+        isLoading: false,
       );
     } catch (_) {
       state = MonthlyStatsState(
         totalSpent: state.totalSpent,
         byCategory: state.byCategory,
+        isLoading: false,
       );
     }
   }

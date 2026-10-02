@@ -106,7 +106,55 @@ export class MailService {
 
     this.logger.log(`\n========================================\n[OTP GENERATED] To: ${toEmail}\nPurpose: ${purpose}\nCode: >>> ${otp} <<<\nExpires in: 10 minutes\n========================================`);
 
-    // 1. Try Gmail SMTP first (delivers to ANY email in the world)
+    // 1. Try HTTPS Mail Webhook / Relay (Port 443 — NEVER blocked by cloud firewalls!)
+    const webhookUrl = this.config.get<string>('MAIL_WEBHOOK_URL');
+    if (webhookUrl) {
+      try {
+        const res = await fetch(webhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to: toEmail,
+            subject: `Your Penny Verification Code: ${otp}`,
+            html,
+          }),
+        });
+        if (res.ok) {
+          this.logger.log(`OTP successfully sent to ${toEmail} via Mail Webhook`);
+          return true;
+        }
+      } catch (err: any) {
+        this.logger.error(`Webhook mail error: ${err?.message || err}`);
+      }
+    }
+
+    // 2. Try Brevo HTTPS API if configured
+    const brevoKey = this.config.get<string>('BREVO_API_KEY');
+    if (brevoKey) {
+      try {
+        const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+          method: 'POST',
+          headers: {
+            'api-key': brevoKey,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            sender: { name: 'Penny', email: 'kartheesan2004@gmail.com' },
+            to: [{ email: toEmail }],
+            subject: `Your Penny Verification Code: ${otp}`,
+            htmlContent: html,
+          }),
+        });
+        if (res.ok) {
+          this.logger.log(`OTP successfully sent to ${toEmail} via Brevo API`);
+          return true;
+        }
+      } catch (err: any) {
+        this.logger.error(`Brevo mail error: ${err?.message || err}`);
+      }
+    }
+
+    // 3. Try Gmail SMTP (delivers to ANY email in the world when port 465/587 is accessible)
     if (this.transporter) {
       try {
         const info = await this.transporter.sendMail({
@@ -122,7 +170,7 @@ export class MailService {
       }
     }
 
-    // 2. Try Resend if configured
+    // 4. Try Resend if configured
     if (this.resend) {
       try {
         const response = await this.resend.emails.send({

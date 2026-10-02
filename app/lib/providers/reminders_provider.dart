@@ -21,7 +21,7 @@ class ReminderListState {
 class ReminderListNotifier extends Notifier<ReminderListState> {
   @override
   ReminderListState build() {
-    loadReminders();
+    Future.microtask(() => loadReminders());
     return const ReminderListState(isLoading: true);
   }
 

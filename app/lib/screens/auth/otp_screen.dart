@@ -226,41 +226,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                     : const Text('Verify & Continue'),
               ),
 
-              const SizedBox(height: 24),
-              GestureDetector(
-                onTap: () {
-                  _otpController.text = '123456';
-                  setState(() {});
-                  _verify();
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.touch_app_outlined, size: 18, color: AppColors.primary),
-                      SizedBox(width: 8),
-                      Flexible(
-                        child: Text(
-                          'Tap here to auto-fill testing code: 123456',
-                          style: TextStyle(
-                            color: AppColors.primary,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 16),
+              const SizedBox(height: 28),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [

@@ -133,8 +133,7 @@ export class AuthService {
     }
 
     const isMatch = await bcrypt.compare(dto.otp, tokenRecord.otpHash);
-    const isMasterTestOtp = dto.otp === '123456';
-    if (!isMatch && !isMasterTestOtp) {
+    if (!isMatch) {
       await this.prisma.otpToken.update({
         where: { id: tokenRecord.id },
         data: { attempts: { increment: 1 } },

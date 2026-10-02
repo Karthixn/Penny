@@ -11,11 +11,14 @@ class AuthApi {
     required String password,
     String? displayName,
   }) async {
-    final response = await _client.dio.post('/auth/register', data: {
+    final payload = <String, dynamic>{
       'email': email,
       'password': password,
-      'displayName': ?displayName,
-    });
+    };
+    if (displayName != null) {
+      payload['displayName'] = displayName;
+    }
+    final response = await _client.dio.post('/auth/register', data: payload);
     return response.data as Map<String, dynamic>;
   }
 

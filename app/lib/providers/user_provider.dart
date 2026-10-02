@@ -21,7 +21,7 @@ class UserState {
 class UserNotifier extends Notifier<UserState> {
   @override
   UserState build() {
-    loadProfile();
+    Future.microtask(() => loadProfile());
     return const UserState(isLoading: true);
   }
 

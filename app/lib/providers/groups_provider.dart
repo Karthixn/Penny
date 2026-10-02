@@ -21,7 +21,7 @@ class GroupListState {
 class GroupListNotifier extends Notifier<GroupListState> {
   @override
   GroupListState build() {
-    loadGroups();
+    Future.microtask(() => loadGroups());
     return const GroupListState(isLoading: true);
   }
 
@@ -29,19 +29,26 @@ class GroupListNotifier extends Notifier<GroupListState> {
     state = GroupListState(groups: state.groups, isLoading: true);
     try {
       final result = await ref.read(groupsApiProvider).list();
-      state = GroupListState(
-        groups: result.cast<Map<String, dynamic>>(),
-      );
+      final List<Map<String, dynamic>> list = [];
+      for (final item in result) {
+        if (item is Map) {
+          list.add(Map<String, dynamic>.from(item));
+        }
+      }
+      state = GroupListState(groups: list, isLoading: false);
     } catch (e) {
-      state = GroupListState(groups: state.groups, error: e.toString());
+      state = GroupListState(
+        groups: state.groups,
+        error: e.toString(),
+        isLoading: false,
+      );
     }
   }
 
   Future<void> createGroup(String name, String? emoji) async {
-    await ref.read(groupsApiProvider).create({
-      'name': name,
-      'emoji': ?emoji,
-    });
+    final payload = <String, dynamic>{'name': name};
+    if (emoji != null) payload['emoji'] = emoji;
+    await ref.read(groupsApiProvider).create(payload);
     await loadGroups();
   }
 }
