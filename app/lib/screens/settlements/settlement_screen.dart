@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/penny_loading.dart';
 import '../../providers/settlements_provider.dart';
 import '../../providers/groups_provider.dart';
 import '../../providers/user_provider.dart';
@@ -314,7 +315,7 @@ class SettlementScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Settle Up')),
       body: asyncSettlements.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const Center(child: PennyLoadingIndicator(size: 48, message: 'Optimizing settlements...')),
         error: (e, _) => Center(child: Text('Error: $e')),
         data: (settlements) {
           if (settlements.isEmpty) {

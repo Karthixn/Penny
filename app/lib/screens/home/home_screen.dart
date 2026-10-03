@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../core/constants/category_constants.dart';
 import '../../core/constants/payment_constants.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/penny_loading.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/expenses_provider.dart';
 import '../../providers/groups_provider.dart';
@@ -568,7 +569,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               stats.isLoading
                                   ? const SizedBox(
                                       height: 36,
-                                      child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                                      child: Center(child: PennyLoadingIndicator(size: 26)),
                                     )
                                   : Text(
                                       _formatPaise(stats.totalSpent),
@@ -629,7 +630,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               // TRANSACTIONS LIST
               if (expensesState.isLoading && displayedItems.isEmpty)
                 const SliverFillRemaining(
-                  child: Center(child: CircularProgressIndicator(color: AppColors.primary)),
+                  child: Center(child: PennyLoadingIndicator(size: 48, message: 'Loading transactions...')),
                 )
               else if (displayedItems.isEmpty)
                 SliverFillRemaining(

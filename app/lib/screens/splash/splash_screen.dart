@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/penny_loading.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/storage/secure_storage.dart';
 
@@ -206,33 +207,10 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
 
                     const Spacer(flex: 3),
 
-                    // Modern bottom loading animation
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 80),
-                      child: Column(
-                        children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(4),
-                            child: SizedBox(
-                              height: 3,
-                              child: LinearProgressIndicator(
-                                backgroundColor: AppColors.surface,
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  AppColors.primary.withValues(alpha: 0.8),
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          const Text(
-                            'Connecting securely...',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: AppColors.textTertiary,
-                            ),
-                          ),
-                        ],
-                      ),
+                    // Custom branded loading animation
+                    const PennyLoadingIndicator(
+                      size: 42,
+                      message: 'Connecting securely...',
                     ),
 
                     const SizedBox(height: 36),

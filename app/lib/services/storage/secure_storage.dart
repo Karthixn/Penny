@@ -45,4 +45,24 @@ class SecureStorage {
       await _storage.delete(key: _refreshTokenKey);
     } catch (_) {}
   }
+
+  static Future<void> set(String key, String value) async {
+    try {
+      await _storage.write(key: key, value: value);
+    } catch (_) {}
+  }
+
+  static Future<String?> get(String key) async {
+    try {
+      return await _storage.read(key: key);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> delete(String key) async {
+    try {
+      await _storage.delete(key: key);
+    } catch (_) {}
+  }
 }

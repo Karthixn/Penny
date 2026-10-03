@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/penny_loading.dart';
 import '../../providers/groups_provider.dart';
 
 class GroupsScreen extends ConsumerWidget {
@@ -37,7 +38,7 @@ class GroupsScreen extends ConsumerWidget {
         ],
       ),
       body: state.isLoading && state.groups.isEmpty
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: PennyLoadingIndicator(size: 48, message: 'Loading groups...'))
           : state.groups.isEmpty
               ? _buildEmptyState(context, ref)
               : RefreshIndicator(
@@ -422,7 +423,7 @@ class GroupsScreen extends ConsumerWidget {
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (_) => const Center(child: CircularProgressIndicator(color: AppColors.primary)),
+        builder: (_) => const Center(child: PennyLoadingIndicator(size: 44, message: 'Loading archived groups...')),
       );
 
       final list = await ref.read(groupsApiProvider).list(archived: true);

@@ -6,10 +6,13 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants/category_constants.dart';
+import '../../core/widgets/export_dialog.dart';
+import '../../core/widgets/penny_loading.dart';
 import '../../providers/groups_provider.dart';
 import '../../providers/expenses_provider.dart';
 import '../../providers/settlements_provider.dart';
 import '../../providers/user_provider.dart';
+import '../../services/export_service.dart';
 
 final _currencyFormat = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 2);
 String _fmt(int paise) => _currencyFormat.format(paise / 100);
@@ -103,6 +106,65 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> with Sing
     ref.invalidate(settlementOptimizeProvider(widget.groupId));
   }
 
+  void _exportGroupStatement(Map<String, dynamic>? group) async {
+    if (group == null) return;
+    try {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(child: PennyLoadingIndicator(size: 44, message: 'Generating group statement...')),
+      );
+
+      final expenses = await ref.read(_groupExpensesProvider(widget.groupId).future);
+      final settlements = await ref.read(_groupSettlementsProvider(widget.groupId).future);
+
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+
+      if (expenses.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No group expenses recorded yet to export!')),
+        );
+        return;
+      }
+
+      final csv = ExportService.generateGroupCsv(
+        group: group,
+        expenses: expenses,
+        settlements: settlements,
+      );
+
+      final whatsAppText = ExportService.generateWhatsAppGroupSummary(
+        group: group,
+        expenses: expenses,
+      );
+
+      int totalPaise = 0;
+      for (final e in expenses) {
+        totalPaise += (e['amount'] as int? ?? 0);
+      }
+      final groupNameClean = (group['name'] as String? ?? 'group').replaceAll(' ', '_');
+
+      ExportBottomSheet.show(
+        context: context,
+        title: 'Export Group Statement',
+        subtitle: '${group['name']} • Excel / CSV',
+        csvContent: csv,
+        fileName: 'penny_${groupNameClean}_${DateTime.now().millisecondsSinceEpoch}.csv',
+        whatsAppSummary: whatsAppText,
+        itemCount: expenses.length,
+        totalFormatted: '₹${(totalPaise / 100).toStringAsFixed(2)}',
+      );
+    } catch (e) {
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to export: $e'), backgroundColor: Colors.redAccent),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final detailAsync = ref.watch(groupDetailProvider(widget.groupId));
@@ -112,7 +174,7 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> with Sing
     return detailAsync.when(
       loading: () => const Scaffold(
         backgroundColor: Color(0xFF141419),
-        body: Center(child: CircularProgressIndicator(color: Color(0xFFF2994A))),
+        body: Center(child: PennyLoadingIndicator(size: 50, message: 'Loading group...')),
       ),
       error: (e, _) => Scaffold(
         backgroundColor: const Color(0xFF141419),
@@ -182,6 +244,11 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> with Sing
             ),
             actions: [
               IconButton(
+                icon: const Icon(Icons.table_chart_outlined, color: Color(0xFF00D68F)),
+                tooltip: 'Export Statement (Excel / WhatsApp)',
+                onPressed: () => _exportGroupStatement(group),
+              ),
+              IconButton(
                 icon: const Icon(Icons.person_add_alt_1_rounded, color: Colors.white),
                 tooltip: 'Invite Members',
                 onPressed: _showInviteDialog,
@@ -190,7 +257,9 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> with Sing
                 icon: const Icon(Icons.more_vert_rounded, color: Colors.white),
                 color: const Color(0xFF242736),
                 onSelected: (value) async {
-                  if (value == 'invite') {
+                  if (value == 'export') {
+                    _exportGroupStatement(group);
+                  } else if (value == 'invite') {
                     _showInviteDialog();
                   } else if (value == 'settle') {
                     context.push('/settle/${widget.groupId}');
@@ -240,6 +309,16 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> with Sing
                 itemBuilder: (ctx) {
                   final isArchived = group?['isArchived'] == true;
                   return [
+                    const PopupMenuItem(
+                      value: 'export',
+                      child: Row(
+                        children: [
+                          Icon(Icons.table_chart_outlined, color: Color(0xFF00D68F), size: 18),
+                          SizedBox(width: 8),
+                          Text('Export to Excel / CSV', style: TextStyle(color: Colors.white)),
+                        ],
+                      ),
+                    ),
                     const PopupMenuItem(
                       value: 'invite',
                       child: Row(
@@ -349,7 +428,7 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> with Sing
         context: context,
         barrierDismissible: false,
         builder: (_) => const Center(
-          child: CircularProgressIndicator(color: Color(0xFFF2994A)),
+          child: PennyLoadingIndicator(size: 44, message: 'Creating invite code...'),
         ),
       );
 
@@ -524,7 +603,7 @@ class _OverviewTab extends ConsumerWidget {
             loading: () => const Center(
               child: Padding(
                 padding: EdgeInsets.symmetric(vertical: 24),
-                child: CircularProgressIndicator(color: Color(0xFFF2994A)),
+                child: PennyLoadingIndicator(size: 36),
               ),
             ),
             error: (e, _) => Padding(
@@ -616,7 +695,7 @@ class _OverviewTab extends ConsumerWidget {
             loading: () => const Center(
               child: Padding(
                 padding: EdgeInsets.symmetric(vertical: 16),
-                child: CircularProgressIndicator(color: Color(0xFFF2994A)),
+                child: PennyLoadingIndicator(size: 36),
               ),
             ),
             error: (e, _) => Text('Could not load debts: $e', style: const TextStyle(color: Colors.redAccent)),
@@ -1839,7 +1918,7 @@ class _ExpensesTab extends ConsumerWidget {
       color: const Color(0xFFF2994A),
       onRefresh: () async => onRefresh(),
       child: stateAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator(color: Color(0xFFF2994A))),
+        loading: () => const Center(child: PennyLoadingIndicator(size: 44, message: 'Loading expenses...')),
         error: (e, _) => Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,

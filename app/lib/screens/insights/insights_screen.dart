@@ -6,8 +6,11 @@ import 'package:intl/intl.dart';
 import '../../core/constants/category_constants.dart';
 import '../../core/constants/payment_constants.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/export_dialog.dart';
+import '../../core/widgets/penny_loading.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/expenses_provider.dart';
+import '../../services/export_service.dart';
 import 'widgets/interactive_pie_chart.dart';
 
 final _currFmt = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
@@ -158,6 +161,75 @@ class _InsightsScreenState extends ConsumerState<InsightsScreen> {
     }
   }
 
+  Future<void> _exportMonthlyReport() async {
+    try {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(child: PennyLoadingIndicator(size: 44, message: 'Preparing monthly statement...')),
+      );
+
+      final startDate = DateTime(_year, _month, 1).toIso8601String();
+      final endDate = DateTime(_year, _month + 1, 0, 23, 59, 59).toIso8601String();
+
+      final api = ref.read(apiClientProvider);
+      final res = await api.dio.get('/expenses', queryParameters: {
+        'startDate': startDate,
+        'endDate': endDate,
+        'limit': 200,
+      });
+
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+
+      final rawData = res.data['data'];
+      final List<Map<String, dynamic>> items = [];
+      if (rawData is List) {
+        for (final item in rawData) {
+          if (item is Map) items.add(Map<String, dynamic>.from(item));
+        }
+      }
+
+      final monthStr = DateFormat('MMMM yyyy').format(DateTime(_year, _month));
+
+      if (items.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No expenses recorded in $monthStr to export!')),
+        );
+        return;
+      }
+
+      final csv = ExportService.generatePersonalCsv(expenses: items, userName: 'Monthly Spending');
+      final whatsAppText = ExportService.generateWhatsAppGroupSummary(
+        group: {'name': 'Monthly Financial Report ($monthStr)'},
+        expenses: items,
+      );
+
+      int totalPaise = 0;
+      for (final e in items) {
+        totalPaise += (e['amount'] as int? ?? 0);
+      }
+
+      ExportBottomSheet.show(
+        context: context,
+        title: 'Monthly Statement',
+        subtitle: '$monthStr • Excel / CSV',
+        csvContent: csv,
+        fileName: 'penny_statement_${_year}_${_month}_${DateTime.now().millisecondsSinceEpoch}.csv',
+        whatsAppSummary: whatsAppText,
+        itemCount: items.length,
+        totalFormatted: '₹${(totalPaise / 100).toStringAsFixed(2)}',
+      );
+    } catch (e) {
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to export: $e'), backgroundColor: AppColors.red),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final monthLabel = DateFormat('MMMM yyyy').format(DateTime(_year, _month));
@@ -209,9 +281,16 @@ class _InsightsScreenState extends ConsumerState<InsightsScreen> {
       appBar: AppBar(
         title: const Text('Insights', style: TextStyle(fontWeight: FontWeight.bold)),
         elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.table_chart_outlined, color: Color(0xFF00D68F)),
+            tooltip: 'Export Monthly Statement (Excel / WhatsApp)',
+            onPressed: _exportMonthlyReport,
+          ),
+        ],
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+          ? const Center(child: PennyLoadingIndicator(size: 48, message: 'Analyzing spending...'))
           : RefreshIndicator(
               onRefresh: _load,
               color: AppColors.primary,
@@ -796,13 +875,11 @@ class _InsightsScreenState extends ConsumerState<InsightsScreen> {
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 24),
                     child: Center(
-                      child: Column(
-                        children: [
-                          CircularProgressIndicator(strokeWidth: 2.5, color: color),
-                          const SizedBox(height: 10),
-                          Text('Loading ${meta.label} transactions...',
-                              style: const TextStyle(color: Colors.white54, fontSize: 12)),
-                        ],
+                      child: PennyLoadingIndicator(
+                        size: 38,
+                        primaryColor: color,
+                        secondaryColor: color,
+                        message: 'Loading ${meta.label} transactions...',
                       ),
                     ),
                   )

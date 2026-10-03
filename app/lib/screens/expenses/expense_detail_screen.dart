@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../core/constants/category_constants.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/penny_loading.dart';
 import '../../providers/expenses_provider.dart';
 import '../../providers/groups_provider.dart';
 import 'split_by_amounts_screen.dart';
@@ -306,7 +307,7 @@ class _ExpenseDetailScreenState extends ConsumerState<ExpenseDetailScreen> {
     return detailAsync.when(
       loading: () => const Scaffold(
         backgroundColor: Color(0xFF141419),
-        body: Center(child: CircularProgressIndicator(color: Color(0xFFF2994A))),
+        body: Center(child: PennyLoadingIndicator(size: 48, message: 'Loading expense details...')),
       ),
       error: (e, _) => Scaffold(
         backgroundColor: const Color(0xFF141419),

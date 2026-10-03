@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/penny_loading.dart';
 import '../../providers/reminders_provider.dart';
 
 final _dateFmt = DateFormat('MMM d, yyyy');
@@ -125,7 +126,7 @@ class RemindersScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Reminders')),
       body: reminderState.isLoading && reminders.isEmpty
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: PennyLoadingIndicator(size: 48, message: 'Loading reminders...'))
           : reminders.isEmpty
               ? const Center(
                   child: Column(
