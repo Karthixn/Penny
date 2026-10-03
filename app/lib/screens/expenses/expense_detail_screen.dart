@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import '../../core/constants/category_constants.dart';
 import '../../core/theme/app_theme.dart';
 import '../../providers/expenses_provider.dart';
 import '../../providers/groups_provider.dart';
@@ -65,11 +66,11 @@ class _ExpenseDetailScreenState extends ConsumerState<ExpenseDetailScreen> {
   }
 
   String _getMemberId(Map<String, dynamic> m) {
-    return (m['id'] ?? m['userId'] ?? m['user']?['id'] ?? '') as String;
+    return (m['userId'] ?? m['user']?['id'] ?? m['id'] ?? '') as String;
   }
 
   String _getMemberName(Map<String, dynamic> m) {
-    return (m['displayName'] ?? m['user']?['displayName'] ?? m['email'] ?? m['user']?['email'] ?? 'Member') as String;
+    return (m['displayName'] ?? m['user']?['displayName'] ?? m['name'] ?? m['email'] ?? m['user']?['email'] ?? 'Member') as String;
   }
 
   void _toggleMember(String id, List<Map<String, dynamic>> allMembers) {
@@ -403,16 +404,10 @@ class _ExpenseDetailScreenState extends ConsumerState<ExpenseDetailScreen> {
                   children: [
                     CircleAvatar(
                       radius: 22,
-                      backgroundColor: const Color(0xFFF2994A).withValues(alpha: 0.15),
+                      backgroundColor: CategoryConstants.getColor(category).withValues(alpha: 0.15),
                       child: Icon(
-                        category == 'food'
-                            ? Icons.restaurant
-                            : category == 'transport'
-                                ? Icons.directions_car
-                                : category == 'shopping'
-                                    ? Icons.shopping_bag
-                                    : Icons.receipt_long,
-                        color: const Color(0xFFF2994A),
+                        CategoryConstants.getIcon(category),
+                        color: CategoryConstants.getColor(category),
                       ),
                     ),
                     const SizedBox(width: 14),
@@ -422,7 +417,7 @@ class _ExpenseDetailScreenState extends ConsumerState<ExpenseDetailScreen> {
                         children: [
                           Text(description, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
                           const SizedBox(height: 2),
-                          Text(category[0].toUpperCase() + category.substring(1), style: const TextStyle(color: Colors.white54, fontSize: 13)),
+                          Text(CategoryConstants.getLabel(category), style: const TextStyle(color: Colors.white54, fontSize: 13)),
                         ],
                       ),
                     ),

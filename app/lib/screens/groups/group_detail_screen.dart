@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import '../../core/constants/category_constants.dart';
 import '../../providers/groups_provider.dart';
 import '../../providers/expenses_provider.dart';
 import '../../providers/settlements_provider.dart';
@@ -734,6 +735,9 @@ class _OverviewTab extends ConsumerWidget {
     final totalAmount = (exp['totalAmount'] as num?)?.toInt() ?? 0;
     final dateStr = _formatActivityDate(exp['date'] ?? exp['createdAt']);
 
+    final category = (exp['category'] as String?) ?? 'other';
+    final catMeta = CategoryConstants.get(category);
+
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
@@ -763,15 +767,43 @@ class _OverviewTab extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          title,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: catMeta.color.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(catMeta.icon, color: catMeta.color, size: 10),
+                            const SizedBox(width: 4),
+                            Text(
+                              catMeta.label,
+                              style: TextStyle(
+                                color: catMeta.color,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 3),
                   Text(

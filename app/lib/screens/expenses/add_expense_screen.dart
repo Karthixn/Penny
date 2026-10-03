@@ -1,23 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/constants/category_constants.dart';
 import '../../core/theme/app_theme.dart';
 import '../../providers/expenses_provider.dart';
 import '../../providers/groups_provider.dart';
 import '../../providers/user_provider.dart';
 import 'split_by_amounts_screen.dart';
 import 'split_by_shares_dialog.dart';
-
-const _categories = [
-  ('food', Icons.restaurant, 'Food'),
-  ('transport', Icons.directions_car, 'Transport'),
-  ('shopping', Icons.shopping_bag, 'Shopping'),
-  ('entertainment', Icons.movie, 'Entertainment'),
-  ('bills', Icons.receipt_long, 'Bills'),
-  ('health', Icons.favorite, 'Health'),
-  ('education', Icons.school, 'Education'),
-  ('other', Icons.more_horiz, 'Other'),
-];
 
 class AddExpenseScreen extends ConsumerStatefulWidget {
   final String? groupId;
@@ -70,31 +60,36 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
   void _initGroupMembers(List<Map<String, dynamic>> members, String currentUserId) {
     if (_selectedMemberIds.isNotEmpty) return; // already initialized
 
-    // Set default payer to current user, or first member
-    _payerUserId ??= currentUserId;
-    final existsInGroup = members.any((m) => _getMemberId(m) == currentUserId);
-    if (!existsInGroup && members.isNotEmpty) {
-      _payerUserId = _getMemberId(members.first);
+    // Set default payer to current user if member, or first member
+    final currentUserInGroup = members.any((m) => _getMemberId(m) == currentUserId);
+    if (currentUserInGroup) {
+      _payerUserId ??= currentUserId;
+    } else if (members.isNotEmpty) {
+      _payerUserId ??= _getMemberId(members.first);
+    } else {
+      _payerUserId ??= currentUserId;
     }
 
     // Default: select all members for equal split
     for (final m in members) {
       final id = _getMemberId(m);
-      _selectedMemberIds.add(id);
-      _memberShares[id] = 1.0;
+      if (id.isNotEmpty) {
+        _selectedMemberIds.add(id);
+        _memberShares[id] = 1.0;
+      }
     }
-    _recalculateSplits(members: members);
+    _recalculateSplits();
   }
 
   String _getMemberId(Map<String, dynamic> m) {
-    return (m['id'] ?? m['userId'] ?? m['user']?['id'] ?? '') as String;
+    return (m['userId'] ?? m['user']?['id'] ?? m['id'] ?? '') as String;
   }
 
   String _getMemberName(Map<String, dynamic> m) {
-    return (m['displayName'] ?? m['user']?['displayName'] ?? m['email'] ?? m['user']?['email'] ?? 'Member') as String;
+    return (m['displayName'] ?? m['user']?['displayName'] ?? m['name'] ?? m['email'] ?? m['user']?['email'] ?? 'Member') as String;
   }
 
-  void _recalculateSplits({List<Map<String, dynamic>>? members}) {
+  void _recalculateSplits() {
     final amountVal = double.tryParse(_amount) ?? 0;
     final totalPaise = (amountVal * 100).round();
 
@@ -297,10 +292,14 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
 
       if (widget.groupId != null) {
         expenseData['groupId'] = widget.groupId;
-        final payer = _payerUserId ?? currentUserId;
+        final payer = (_payerUserId != null && _payerUserId!.isNotEmpty) ? _payerUserId! : currentUserId;
         expenseData['payers'] = [
           {'userId': payer, 'amount': totalPaise}
         ];
+
+        if (_splitMethod == 'equal') {
+          _recalculateSplits();
+        }
 
         final List<Map<String, dynamic>> splits = [];
         for (final id in _selectedMemberIds) {
@@ -314,13 +313,25 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
           }
         }
 
+        // Fallback: If splits list is empty, split equally across selected or payer
+        if (splits.isEmpty) {
+          final targetIds = _selectedMemberIds.isNotEmpty ? _selectedMemberIds.toList() : [payer];
+          final base = totalPaise ~/ targetIds.length;
+          var rem = totalPaise % targetIds.length;
+          for (final id in targetIds) {
+            splits.add({
+              'userId': id,
+              'amount': base + (rem > 0 ? 1 : 0),
+              'splitMethod': 'equal',
+            });
+            if (rem > 0) rem--;
+          }
+        }
+
         // Validate splits match total amount
         final splitSum = splits.fold<int>(0, (prev, s) => prev + (s['amount'] as int));
-        if (splitSum != totalPaise) {
-          // Adjust last split for round-off
-          if (splits.isNotEmpty) {
-            splits.first['amount'] = (splits.first['amount'] as int) + (totalPaise - splitSum);
-          }
+        if (splitSum != totalPaise && splits.isNotEmpty) {
+          splits.first['amount'] = (splits.first['amount'] as int) + (totalPaise - splitSum);
         }
 
         expenseData['splits'] = splits;
@@ -442,20 +453,36 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
               child: ListView(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                children: _categories.map((c) {
-                  final isSel = c.$1 == _selectedCategory;
+                children: CategoryConstants.all.map((c) {
+                  final isSel = c.id == _selectedCategory;
                   return Padding(
                     padding: const EdgeInsets.only(right: 8),
                     child: FilterChip(
                       selected: isSel,
                       showCheckmark: false,
-                      avatar: Icon(c.$2, size: 16, color: isSel ? Colors.black : Colors.white70),
-                      label: Text(c.$3, style: TextStyle(color: isSel ? Colors.black : Colors.white70, fontSize: 12, fontWeight: FontWeight.w600)),
+                      avatar: Icon(
+                        c.icon,
+                        size: 16,
+                        color: isSel ? Colors.white : c.color,
+                      ),
+                      label: Text(
+                        c.label,
+                        style: TextStyle(
+                          color: isSel ? Colors.white : Colors.white70,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                       backgroundColor: const Color(0xFF24242C),
-                      selectedColor: const Color(0xFFF2994A),
-                      onSelected: (_) => setState(() => _selectedCategory = c.$1),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                      side: BorderSide.none,
+                      selectedColor: c.color,
+                      onSelected: (_) => setState(() => _selectedCategory = c.id),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                        side: BorderSide(
+                          color: isSel ? c.color : Colors.transparent,
+                          width: 1.5,
+                        ),
+                      ),
                     ),
                   );
                 }).toList(),

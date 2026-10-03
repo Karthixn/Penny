@@ -9,6 +9,44 @@ export class ExpensesService {
 
   async create(userId: string, dto: CreateExpenseDto) {
     return this.prisma.$transaction(async (tx) => {
+      let resolveUserId = (id: string) => id;
+      if (dto.groupId) {
+        const groupMembers = await tx.groupMember.findMany({
+          where: { groupId: dto.groupId, leftAt: null },
+          select: { id: true, userId: true },
+        });
+        const memberMap = new Map<string, string>();
+        for (const gm of groupMembers) {
+          memberMap.set(gm.id, gm.userId);
+          memberMap.set(gm.userId, gm.userId);
+        }
+        resolveUserId = (id: string) => memberMap.get(id) ?? id;
+      }
+
+      // Consolidate payers by resolved userId
+      const rawPayers = dto.payers?.length
+        ? dto.payers
+        : [{ userId, amount: dto.totalAmount }];
+      const payersMap = new Map<string, number>();
+      for (const p of rawPayers) {
+        const uid = resolveUserId(p.userId);
+        payersMap.set(uid, (payersMap.get(uid) ?? 0) + p.amount);
+      }
+
+      // Consolidate splits by resolved userId
+      const rawSplits = dto.splits?.length
+        ? dto.splits
+        : [{ userId, amount: dto.totalAmount, splitMethod: 'equal' }];
+      const splitsMap = new Map<string, { amount: number; splitMethod: string }>();
+      for (const s of rawSplits) {
+        const uid = resolveUserId(s.userId);
+        const existing = splitsMap.get(uid);
+        splitsMap.set(uid, {
+          amount: (existing?.amount ?? 0) + s.amount,
+          splitMethod: s.splitMethod ?? 'equal',
+        });
+      }
+
       const expense = await tx.expense.create({
         data: {
           description: dto.description,
@@ -19,16 +57,16 @@ export class ExpensesService {
           groupId: dto.groupId ?? null,
           clientId: dto.clientId ?? null,
           payers: {
-            create: dto.payers.map((p) => ({
-              userId: p.userId,
-              amount: p.amount,
+            create: Array.from(payersMap.entries()).map(([uid, amount]) => ({
+              userId: uid,
+              amount,
             })),
           },
           splits: {
-            create: dto.splits.map((s) => ({
-              userId: s.userId,
-              amount: s.amount,
-              splitMethod: s.splitMethod,
+            create: Array.from(splitsMap.entries()).map(([uid, data]) => ({
+              userId: uid,
+              amount: data.amount,
+              splitMethod: data.splitMethod,
             })),
           },
         },
@@ -142,25 +180,53 @@ export class ExpensesService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      let resolveUserId = (id: string) => id;
+      if (expense.groupId) {
+        const groupMembers = await tx.groupMember.findMany({
+          where: { groupId: expense.groupId, leftAt: null },
+          select: { id: true, userId: true },
+        });
+        const memberMap = new Map<string, string>();
+        for (const gm of groupMembers) {
+          memberMap.set(gm.id, gm.userId);
+          memberMap.set(gm.userId, gm.userId);
+        }
+        resolveUserId = (id: string) => memberMap.get(id) ?? id;
+      }
+
       if (dto.payers?.length) {
+        const payersMap = new Map<string, number>();
+        for (const p of dto.payers) {
+          const uid = resolveUserId(p.userId);
+          payersMap.set(uid, (payersMap.get(uid) ?? 0) + p.amount);
+        }
         await tx.expensePayer.deleteMany({ where: { expenseId: id } });
         await tx.expensePayer.createMany({
-          data: dto.payers.map((p) => ({
+          data: Array.from(payersMap.entries()).map(([uid, amount]) => ({
             expenseId: id,
-            userId: p.userId,
-            amount: p.amount,
+            userId: uid,
+            amount,
           })),
         });
       }
 
       if (dto.splits?.length) {
+        const splitsMap = new Map<string, { amount: number; splitMethod: string }>();
+        for (const s of dto.splits) {
+          const uid = resolveUserId(s.userId);
+          const existing = splitsMap.get(uid);
+          splitsMap.set(uid, {
+            amount: (existing?.amount ?? 0) + s.amount,
+            splitMethod: s.splitMethod ?? 'equal',
+          });
+        }
         await tx.expenseSplit.deleteMany({ where: { expenseId: id } });
         await tx.expenseSplit.createMany({
-          data: dto.splits.map((s) => ({
+          data: Array.from(splitsMap.entries()).map(([uid, data]) => ({
             expenseId: id,
-            userId: s.userId,
-            amount: s.amount,
-            splitMethod: s.splitMethod,
+            userId: uid,
+            amount: data.amount,
+            splitMethod: data.splitMethod,
           })),
         });
       }

@@ -30,11 +30,11 @@ class _SplitBySharesDialogState extends State<SplitBySharesDialog> {
   }
 
   String _getMemberId(Map<String, dynamic> m) {
-    return (m['id'] ?? m['userId'] ?? m['user']?['id'] ?? '') as String;
+    return (m['userId'] ?? m['user']?['id'] ?? m['id'] ?? '') as String;
   }
 
   String _getMemberName(Map<String, dynamic> m) {
-    return (m['displayName'] ?? m['user']?['displayName'] ?? m['email'] ?? m['user']?['email'] ?? 'Member') as String;
+    return (m['displayName'] ?? m['user']?['displayName'] ?? m['name'] ?? m['email'] ?? m['user']?['email'] ?? 'Member') as String;
   }
 
   double get _totalShares {

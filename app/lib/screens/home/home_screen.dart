@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import '../../core/constants/category_constants.dart';
 import '../../core/theme/app_theme.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/expenses_provider.dart';
@@ -147,7 +148,6 @@ class HomeScreen extends ConsumerWidget {
                       final exp = expenses.expenses[index];
                       final amount = exp['totalAmount'] as int;
                       final category = exp['category'] as String? ?? 'other';
-                      final icon = _categoryIcon(category);
 
                       return Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
@@ -181,10 +181,14 @@ class HomeScreen extends ConsumerWidget {
                                   width: 44,
                                   height: 44,
                                   decoration: BoxDecoration(
-                                    color: AppColors.primary.withValues(alpha: 0.1),
+                                    color: CategoryConstants.getColor(category).withValues(alpha: 0.15),
                                     borderRadius: BorderRadius.circular(12),
                                   ),
-                                  child: Icon(icon, color: AppColors.primary, size: 22),
+                                  child: Icon(
+                                    CategoryConstants.getIcon(category),
+                                    color: CategoryConstants.getColor(category),
+                                    size: 22,
+                                  ),
                                 ),
                                 const SizedBox(width: 14),
                                 Expanded(
@@ -201,7 +205,7 @@ class HomeScreen extends ConsumerWidget {
                                       ),
                                       const SizedBox(height: 2),
                                       Text(
-                                        category[0].toUpperCase() + category.substring(1),
+                                        CategoryConstants.getLabel(category),
                                         style: const TextStyle(color: AppColors.textTertiary, fontSize: 12),
                                       ),
                                     ],
@@ -234,18 +238,5 @@ class HomeScreen extends ConsumerWidget {
         child: const Icon(Icons.add, color: Colors.white),
       ),
     );
-  }
-
-  IconData _categoryIcon(String category) {
-    return switch (category) {
-      'food' => Icons.restaurant,
-      'transport' => Icons.directions_car,
-      'shopping' => Icons.shopping_bag,
-      'entertainment' => Icons.movie,
-      'bills' => Icons.receipt_long,
-      'health' => Icons.favorite,
-      'education' => Icons.school,
-      _ => Icons.more_horiz,
-    };
   }
 }
