@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants/category_constants.dart';
 import '../../providers/groups_provider.dart';
 import '../../providers/expenses_provider.dart';
@@ -1259,40 +1260,166 @@ class _OverviewTab extends ConsumerWidget {
                 ],
               ),
             ),
-            const SizedBox(height: 24),
-            ElevatedButton(
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFF2994A),
+                backgroundColor: const Color(0xFF00D68F),
+                foregroundColor: Colors.black,
                 minimumSize: const Size(double.infinity, 50),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
               ),
+              icon: const Icon(Icons.bolt, size: 22),
+              label: const Text('Pay Now (GPay / UPI)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
               onPressed: () async {
                 Navigator.pop(ctx);
-                if (payeeId == null) return;
+                String vpa = (toUser['upiId'] as String? ?? '').trim();
+                if (vpa.isEmpty) {
+                  final ctl = TextEditingController();
+                  final entered = await showDialog<String>(
+                    context: context,
+                    builder: (dCtx) => AlertDialog(
+                      backgroundColor: const Color(0xFF1E1E24),
+                      title: Text('Pay $toName via UPI', style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold)),
+                      content: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Enter payee UPI ID or phone number (e.g. 9876543210@paytm, name@okhdfcbank):', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: ctl,
+                            autofocus: true,
+                            style: const TextStyle(color: Colors.white),
+                            decoration: InputDecoration(
+                              hintText: 'user@upi or 9876543210@paytm',
+                              hintStyle: const TextStyle(color: Colors.white38),
+                              prefixIcon: const Icon(Icons.bolt, color: Color(0xFF00D68F)),
+                              filled: true,
+                              fillColor: const Color(0xFF282830),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                            ),
+                          ),
+                        ],
+                      ),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(dCtx), child: const Text('Cancel', style: TextStyle(color: Colors.white54))),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00D68F)),
+                          onPressed: () => Navigator.pop(dCtx, ctl.text.trim()),
+                          child: const Text('Open UPI App', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (entered == null || entered.isEmpty) return;
+                  vpa = entered;
+                }
+
+                final amountInr = (amountPaise / 100).toStringAsFixed(2);
+                final upiUri = Uri.parse(
+                  'upi://pay?pa=$vpa&pn=${Uri.encodeComponent(toName)}&am=$amountInr&cu=INR&tn=${Uri.encodeComponent('Penny settlement')}',
+                );
+
                 try {
-                  await ref.read(settlementsApiProvider).create({
-                    'groupId': groupId,
-                    'payeeId': payeeId,
-                    'amount': amountPaise,
-                  });
-                  onRefresh();
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Settlement of ${_fmt(amountPaise)} recorded!'),
-                        backgroundColor: const Color(0xFF4CAF50),
+                  final launched = await launchUrl(upiUri, mode: LaunchMode.externalApplication);
+                  if (!launched) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Could not open UPI app. Make sure Google Pay or PhonePe is installed.')),
+                      );
+                    }
+                  } else {
+                    if (!context.mounted) return;
+                    showDialog(
+                      context: context,
+                      builder: (cCtx) => AlertDialog(
+                        backgroundColor: const Color(0xFF1E1E24),
+                        title: const Text('Confirm Settlement?', style: TextStyle(color: Colors.white)),
+                        content: Text('Did your payment of ₹$amountInr to $toName succeed in Google Pay / UPI?', style: const TextStyle(color: Colors.white70)),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.pop(cCtx), child: const Text('Not Yet', style: TextStyle(color: Colors.white54))),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00D68F)),
+                            onPressed: () async {
+                              Navigator.pop(cCtx);
+                              if (payeeId != null) {
+                                await ref.read(settlementsApiProvider).create({
+                                  'groupId': groupId,
+                                  'payeeId': payeeId,
+                                  'amount': amountPaise,
+                                  'note': 'Paid via GPay/UPI',
+                                });
+                                onRefresh();
+                              }
+                            },
+                            child: const Text('Yes, Record Settlement', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                          ),
+                        ],
                       ),
                     );
                   }
-                } catch (err) {
+                } catch (e) {
                   if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Failed: $err'), backgroundColor: Colors.redAccent),
-                    );
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('UPI error: $e'), backgroundColor: Colors.redAccent));
                   }
                 }
               },
-              child: const Text('Confirm Settlement', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 16)),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Colors.white24),
+                      minimumSize: const Size(0, 46),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: () async {
+                      Navigator.pop(ctx);
+                      if (payeeId == null) return;
+                      try {
+                        await ref.read(settlementsApiProvider).create({
+                          'groupId': groupId,
+                          'payeeId': payeeId,
+                          'amount': amountPaise,
+                        });
+                        onRefresh();
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Settlement of ${_fmt(amountPaise)} recorded!'),
+                              backgroundColor: const Color(0xFF4CAF50),
+                            ),
+                          );
+                        }
+                      } catch (err) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Failed: $err'), backgroundColor: Colors.redAccent),
+                          );
+                        }
+                      }
+                    },
+                    child: const Text('Record Cash', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w600)),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Color(0xFFF2994A)),
+                      minimumSize: const Size(0, 46),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      context.push('/settle/$groupId');
+                    },
+                    child: const Text('Part Pay', style: TextStyle(color: Color(0xFFF2994A), fontWeight: FontWeight.w600)),
+                  ),
+                ),
+              ],
             ),
           ],
         ),

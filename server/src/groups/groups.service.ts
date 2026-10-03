@@ -13,6 +13,7 @@ const memberSelect = {
   id: true,
   displayName: true,
   email: true,
+  upiId: true,
 } as const;
 
 @Injectable()

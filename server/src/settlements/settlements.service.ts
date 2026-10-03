@@ -65,7 +65,7 @@ export class SettlementsService {
 
     const members = await this.prisma.groupMember.findMany({
       where: { groupId, leftAt: null },
-      include: { user: { select: { id: true, displayName: true, email: true } } },
+      include: { user: { select: { id: true, displayName: true, email: true, upiId: true } } },
     });
     const userMap = Object.fromEntries(members.map((m) => [m.userId, m.user]));
 

@@ -83,6 +83,48 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
+  void _showEditUpi(Map<String, dynamic>? profile) {
+    final ctl = TextEditingController(text: profile?['upiId'] as String? ?? '');
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: const Text('UPI ID (VPA)', style: TextStyle(color: AppColors.textPrimary)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Add your UPI ID so group members can pay you directly via Google Pay or PhonePe in 1 tap.',
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: ctl,
+              style: const TextStyle(color: AppColors.textPrimary),
+              decoration: const InputDecoration(
+                hintText: 'e.g. name@okaxis, 9876543210@paytm',
+                prefixIcon: Icon(Icons.bolt, color: Color(0xFF00D68F)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFF2994A)),
+            onPressed: () async {
+              final upi = ctl.text.trim();
+              await ref.read(userProvider.notifier).updateProfile({'upiId': upi});
+              if (ctx.mounted) Navigator.pop(ctx);
+            },
+            child: const Text('Save', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
   String _cleanErrorMessage(dynamic e) {
     if (e is DioException) {
       final resData = e.response?.data;
@@ -307,6 +349,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final email = profile?['email'] as String? ?? '';
     final budget = profile?['monthlyBudget'] as int?;
     final isEmailVerified = profile?['isEmailVerified'] as bool? ?? false;
+    final upiId = profile?['upiId'] as String? ?? '';
 
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
@@ -465,6 +508,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   title: 'Monthly Budget',
                   subtitle: budget != null ? '₹${(budget / 100).toStringAsFixed(0)}' : 'Not set',
                   onTap: () => _showEditBudget(profile),
+                ),
+                _SettingsTile(
+                  icon: Icons.bolt_outlined,
+                  title: 'UPI ID (GPay / PhonePe)',
+                  subtitle: upiId.isNotEmpty ? upiId : 'Not set (tap to add)',
+                  onTap: () => _showEditUpi(profile),
                 ),
 
                 const SizedBox(height: 24),

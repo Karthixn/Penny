@@ -20,6 +20,7 @@ class AddExpenseScreen extends ConsumerStatefulWidget {
 }
 
 class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
+  late String? _selectedGroupId = widget.groupId;
   String _amount = '0';
   String _type = 'expense'; // 'expense' | 'income'
   String _selectedCategory = 'food';
@@ -330,17 +331,20 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
       }
       if (currentUserId == null) throw Exception('User not logged in');
 
+      final currentGroupId = _selectedGroupId;
+      final isGroup = currentGroupId != null;
+
       final expenseData = <String, dynamic>{
         'description': desc,
         'totalAmount': totalPaise,
         'category': _selectedCategory,
-        'type': widget.groupId != null ? 'expense' : _type,
+        'type': isGroup ? 'expense' : _type,
         'paymentMethod': _selectedPaymentMethod,
         'tags': _tags.toList(),
       };
 
-      if (widget.groupId != null) {
-        expenseData['groupId'] = widget.groupId;
+      if (isGroup) {
+        expenseData['groupId'] = currentGroupId;
         final payer = (_payerUserId != null && _payerUserId!.isNotEmpty) ? _payerUserId! : currentUserId;
         expenseData['payers'] = [
           {'userId': payer, 'amount': totalPaise}
@@ -396,8 +400,8 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
 
       await ref.read(expenseListProvider.notifier).addExpense(expenseData);
 
-      if (widget.groupId != null) {
-        ref.invalidate(groupDetailProvider(widget.groupId!));
+      if (currentGroupId != null) {
+        ref.invalidate(groupDetailProvider(currentGroupId));
       }
 
       if (mounted) context.pop();
@@ -416,12 +420,13 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
   Widget build(BuildContext context) {
     final userState = ref.watch(userProvider);
     final currentUserId = userState.profile?['id'] as String? ?? '';
-    final isGroup = widget.groupId != null;
+    final currentGroupId = _selectedGroupId;
+    final isGroup = currentGroupId != null;
 
     AsyncValue<GroupDetailState>? groupDetailAsync;
     List<Map<String, dynamic>> members = [];
     if (isGroup) {
-      groupDetailAsync = ref.watch(groupDetailProvider(widget.groupId!));
+      groupDetailAsync = ref.watch(groupDetailProvider(currentGroupId));
       final group = groupDetailAsync?.value?.group;
       if (group != null && group['members'] is List) {
         members = (group['members'] as List).cast<Map<String, dynamic>>();
@@ -494,6 +499,142 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                 ],
               ),
             ),
+
+            // Destination Switcher (Personal vs Group)
+            if (widget.groupId == null) ...[
+              Container(
+                margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E1E24),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => setState(() {
+                          _selectedGroupId = null;
+                          _selectedMemberIds.clear();
+                          _memberAmounts.clear();
+                        }),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          decoration: BoxDecoration(
+                            color: !isGroup ? const Color(0xFF2F80ED) : Colors.transparent,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          alignment: Alignment.center,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.person, size: 15, color: !isGroup ? Colors.white : Colors.white54),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Personal',
+                                style: TextStyle(
+                                  color: !isGroup ? Colors.white : Colors.white54,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () {
+                          final availableGroups = ref.read(groupListProvider).groups;
+                          if (availableGroups.isNotEmpty) {
+                            setState(() {
+                              _selectedGroupId = availableGroups.first['id'] as String;
+                              _selectedMemberIds.clear();
+                              _payerUserId = null;
+                            });
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('No groups found. Create a group first!')),
+                            );
+                          }
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          decoration: BoxDecoration(
+                            color: isGroup ? const Color(0xFF9B51E0) : Colors.transparent,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          alignment: Alignment.center,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.group, size: 15, color: isGroup ? Colors.white : Colors.white54),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Group Split',
+                                style: TextStyle(
+                                  color: isGroup ? Colors.white : Colors.white54,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              if (isGroup && ref.watch(groupListProvider).groups.isNotEmpty) ...[
+                Container(
+                  margin: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1E1E24),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFF9B51E0).withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.group, size: 16, color: Color(0xFFBB6BD9)),
+                      const SizedBox(width: 8),
+                      const Text('Split in Group:', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                      const Spacer(),
+                      DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: _selectedGroupId,
+                          dropdownColor: const Color(0xFF24242C),
+                          icon: const Icon(Icons.arrow_drop_down, color: Color(0xFFBB6BD9)),
+                          items: ref.watch(groupListProvider).groups.map((g) {
+                            return DropdownMenuItem<String>(
+                              value: g['id'] as String,
+                              child: Text(
+                                g['name'] as String? ?? 'Group',
+                                style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                              ),
+                            );
+                          }).toList(),
+                          onChanged: (newId) {
+                            if (newId != null) {
+                              setState(() {
+                                _selectedGroupId = newId;
+                                _selectedMemberIds.clear();
+                                _payerUserId = null;
+                              });
+                            }
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
 
             // Transaction Type Toggle (Expense vs Income for personal transactions)
             if (!isGroup) ...[

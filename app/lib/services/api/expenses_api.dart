@@ -12,8 +12,12 @@ class ExpensesApi {
 
   Future<Map<String, dynamic>> list({
     String? groupId,
+    String? category,
+    String? type,
+    int? year,
+    int? month,
     int page = 1,
-    int limit = 20,
+    int limit = 50,
   }) async {
     final query = <String, dynamic>{
       'page': page,
@@ -21,6 +25,18 @@ class ExpensesApi {
     };
     if (groupId != null) {
       query['groupId'] = groupId;
+    }
+    if (category != null) {
+      query['category'] = category;
+    }
+    if (type != null) {
+      query['type'] = type;
+    }
+    if (year != null) {
+      query['year'] = year;
+    }
+    if (month != null) {
+      query['month'] = month;
     }
     final response = await _client.dio.get('/expenses', queryParameters: query);
     return response.data as Map<String, dynamic>;

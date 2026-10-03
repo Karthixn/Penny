@@ -14,4 +14,9 @@ export class UpdateUserDto {
   @IsInt()
   @Min(0)
   monthlyBudget?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  upiId?: string;
 }

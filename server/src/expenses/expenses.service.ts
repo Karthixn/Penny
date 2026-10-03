@@ -114,12 +114,30 @@ export class ExpensesService {
     });
   }
 
-  async findAll(userId: string, query: { groupId?: string; page?: number; limit?: number }) {
+  async findAll(
+    userId: string,
+    query: {
+      groupId?: string;
+      category?: string;
+      type?: string;
+      year?: number;
+      month?: number;
+      page?: number;
+      limit?: number;
+    },
+  ) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     const where: any = { deletedAt: null };
 
-    if (query.groupId) {
+    if (query.groupId === 'personal') {
+      where.groupId = null;
+      where.OR = [
+        { createdBy: userId },
+        { payers: { some: { userId } } },
+        { splits: { some: { userId } } },
+      ];
+    } else if (query.groupId) {
       where.groupId = query.groupId;
     } else {
       where.OR = [
@@ -127,6 +145,20 @@ export class ExpensesService {
         { payers: { some: { userId } } },
         { splits: { some: { userId } } },
       ];
+    }
+
+    if (query.category) {
+      where.category = query.category;
+    }
+
+    if (query.type) {
+      where.type = query.type;
+    }
+
+    if (query.year && query.month) {
+      const startDate = new Date(Date.UTC(query.year, query.month - 1, 1));
+      const endDate = new Date(Date.UTC(query.year, query.month, 1));
+      where.date = { gte: startDate, lt: endDate };
     }
 
     const [expenses, total] = await Promise.all([

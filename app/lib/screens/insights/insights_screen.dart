@@ -1,11 +1,13 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../core/constants/category_constants.dart';
 import '../../core/constants/payment_constants.dart';
 import '../../core/theme/app_theme.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/expenses_provider.dart';
 import 'widgets/interactive_pie_chart.dart';
 
 final _currFmt = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
@@ -23,6 +25,8 @@ class _InsightsScreenState extends ConsumerState<InsightsScreen> {
   Map<String, dynamic>? _stats;
   List<Map<String, dynamic>> _monthlyTrend = [];
   String? _selectedCategory;
+  List<Map<String, dynamic>>? _categoryTransactions;
+  bool _loadingCategoryDetails = false;
   String _activeView = 'category'; // 'category' | 'payment_method' | 'tags'
   bool _loading = true;
 
@@ -36,6 +40,8 @@ class _InsightsScreenState extends ConsumerState<InsightsScreen> {
     setState(() {
       _loading = true;
       _selectedCategory = null;
+      _categoryTransactions = null;
+      _loadingCategoryDetails = false;
     });
     try {
       final api = ref.read(apiClientProvider);
@@ -107,6 +113,49 @@ class _InsightsScreenState extends ConsumerState<InsightsScreen> {
       }
     });
     _load();
+  }
+
+  Future<void> _selectCategory(String? cat) async {
+    if (cat == null || _selectedCategory?.toLowerCase() == cat.toLowerCase()) {
+      setState(() {
+        _selectedCategory = null;
+        _categoryTransactions = null;
+        _loadingCategoryDetails = false;
+      });
+      return;
+    }
+
+    setState(() {
+      _selectedCategory = cat;
+      _loadingCategoryDetails = true;
+      _categoryTransactions = null;
+    });
+
+    try {
+      final res = await ref.read(expensesApiProvider).list(
+        category: cat,
+        year: _year,
+        month: _month,
+        limit: 50,
+      );
+      final rawList = res['data'];
+      List<Map<String, dynamic>> items = [];
+      if (rawList is List) {
+        items = rawList.cast<Map<String, dynamic>>();
+      }
+      if (mounted && _selectedCategory?.toLowerCase() == cat.toLowerCase()) {
+        setState(() {
+          _categoryTransactions = items;
+          _loadingCategoryDetails = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _loadingCategoryDetails = false;
+        });
+      }
+    }
   }
 
   @override
@@ -339,7 +388,7 @@ class _InsightsScreenState extends ConsumerState<InsightsScreen> {
                                 ),
                                 if (_selectedCategory != null)
                                   TextButton(
-                                    onPressed: () => setState(() => _selectedCategory = null),
+                                    onPressed: () => _selectCategory(null),
                                     style: TextButton.styleFrom(
                                       padding: EdgeInsets.zero,
                                       minimumSize: const Size(50, 24),
@@ -354,13 +403,22 @@ class _InsightsScreenState extends ConsumerState<InsightsScreen> {
                               byCategory: byCategory,
                               totalSpent: totalSpent,
                               selectedCategory: _selectedCategory,
-                              onCategorySelected: (cat) {
-                                setState(() => _selectedCategory = cat);
-                              },
+                              onCategorySelected: (cat) => _selectCategory(cat),
                             ),
                           ],
                         ),
                       ),
+
+                      // Category Drill-Down Details Card
+                      if (_selectedCategory != null) ...[
+                        const SizedBox(height: 16),
+                        _buildCategoryDrillDown(
+                          context: context,
+                          category: _selectedCategory!,
+                          categoryTotal: byCategory[_selectedCategory!.toLowerCase()] ?? byCategory[_selectedCategory!] ?? 0,
+                          totalSpent: totalSpent,
+                        ),
+                      ],
 
                       const SizedBox(height: 24),
 
@@ -392,11 +450,7 @@ class _InsightsScreenState extends ConsumerState<InsightsScreen> {
                           amount: entry.value,
                           percentage: pct,
                           isSelected: isSelected,
-                          onTap: () {
-                            setState(() {
-                              _selectedCategory = isSelected ? null : entry.key;
-                            });
-                          },
+                          onTap: () => _selectCategory(entry.key),
                         );
                       }),
                       const SizedBox(height: 24),
@@ -551,6 +605,424 @@ class _InsightsScreenState extends ConsumerState<InsightsScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildCategoryDrillDown({
+    required BuildContext context,
+    required String category,
+    required int categoryTotal,
+    required int totalSpent,
+  }) {
+    final meta = CategoryConstants.get(category);
+    final color = meta.color;
+    final pct = totalSpent > 0 ? (categoryTotal / totalSpent * 100) : 0.0;
+    final txList = _categoryTransactions ?? [];
+    final txCount = txList.length;
+    final avgAmount = txCount > 0 ? (categoryTotal ~/ txCount) : categoryTotal;
+
+    Map<String, dynamic>? highestExpense;
+    if (txList.isNotEmpty) {
+      highestExpense = txList.reduce((a, b) {
+        final aAmt = (a['totalAmount'] as num?)?.toInt() ?? 0;
+        final bAmt = (b['totalAmount'] as num?)?.toInt() ?? 0;
+        return aAmt >= bAmt ? a : b;
+      });
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E1E24),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: 0.5), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: 0.08),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header Banner
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(19)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.25),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(meta.icon, color: color, size: 24),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              meta.label,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 17,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: color.withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              '${pct.toStringAsFixed(1)}% of total',
+                              style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Detailed breakdown & transactions',
+                        style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => _selectCategory(null),
+                  icon: const Icon(Icons.close, color: Colors.white70, size: 20),
+                  tooltip: 'Close drill-down',
+                  visualDensity: VisualDensity.compact,
+                ),
+              ],
+            ),
+          ),
+
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 4-cell Metric Highlights
+                Row(
+                  children: [
+                    Expanded(
+                      child: _drillDownStatBox(
+                        title: 'Total Spent',
+                        value: _currFmt.format(categoryTotal / 100),
+                        valueColor: color,
+                        icon: Icons.account_balance_wallet_outlined,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _drillDownStatBox(
+                        title: 'Transactions',
+                        value: _loadingCategoryDetails ? '...' : '$txCount',
+                        valueColor: Colors.white,
+                        icon: Icons.receipt_outlined,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _drillDownStatBox(
+                        title: 'Average Spend',
+                        value: _loadingCategoryDetails ? '...' : _currFmt.format(avgAmount / 100),
+                        valueColor: Colors.white70,
+                        icon: Icons.trending_up,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _drillDownStatBox(
+                        title: 'Highest Bill',
+                        value: _loadingCategoryDetails
+                            ? '...'
+                            : (highestExpense != null
+                                ? _currFmt.format(((highestExpense['totalAmount'] as num?)?.toInt() ?? 0) / 100)
+                                : '—'),
+                        valueColor: const Color(0xFFF2994A),
+                        icon: Icons.star_border,
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 20),
+
+                // Transactions List Section
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Transactions for ${meta.label}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    if (!_loadingCategoryDetails && txList.isNotEmpty)
+                      Text(
+                        'Tap item to view',
+                        style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 11),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+
+                if (_loadingCategoryDetails)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 24),
+                    child: Center(
+                      child: Column(
+                        children: [
+                          CircularProgressIndicator(strokeWidth: 2.5, color: color),
+                          const SizedBox(height: 10),
+                          Text('Loading ${meta.label} transactions...',
+                              style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                        ],
+                      ),
+                    ),
+                  )
+                else if (txList.isEmpty)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF141419),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      children: [
+                        Icon(Icons.inbox_outlined, size: 36, color: Colors.white.withValues(alpha: 0.3)),
+                        const SizedBox(height: 8),
+                        Text(
+                          'No transactions found for ${meta.label} in this period',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: Colors.white54, fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  ...txList.map((tx) {
+                    final isTop = highestExpense != null && tx['id'] == highestExpense['id'];
+                    final amt = (tx['totalAmount'] as num?)?.toInt() ?? 0;
+                    final desc = (tx['description'] as String?)?.isNotEmpty == true
+                        ? tx['description'] as String
+                        : meta.label;
+                    final rawDate = tx['date'] as String?;
+                    String formattedDate = '';
+                    if (rawDate != null) {
+                      try {
+                        formattedDate = DateFormat('dd MMM, hh:mm a').format(DateTime.parse(rawDate).toLocal());
+                      } catch (_) {
+                        formattedDate = rawDate;
+                      }
+                    }
+                    final payMethod = tx['paymentMethod'] as String? ?? 'upi';
+                    final payMeta = PaymentConstants.get(payMethod);
+                    final isGroupExp = tx['groupId'] != null;
+
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF141419),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: isTop ? color.withValues(alpha: 0.4) : const Color(0xFF282830),
+                        ),
+                      ),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(12),
+                          onTap: () {
+                            final id = tx['id'] as String?;
+                            if (id != null) context.push('/expenses/$id');
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 36,
+                                  height: 36,
+                                  decoration: BoxDecoration(
+                                    color: color.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Icon(meta.icon, color: color, size: 18),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              desc,
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                          if (isTop) ...[
+                                            const SizedBox(width: 6),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFFF2994A).withValues(alpha: 0.2),
+                                                borderRadius: BorderRadius.circular(4),
+                                              ),
+                                              child: const Text('Top',
+                                                  style: TextStyle(
+                                                      color: Color(0xFFF2994A),
+                                                      fontSize: 10,
+                                                      fontWeight: FontWeight.bold)),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Row(
+                                        children: [
+                                          if (formattedDate.isNotEmpty)
+                                            Text(
+                                              formattedDate,
+                                              style: TextStyle(
+                                                color: Colors.white.withValues(alpha: 0.4),
+                                                fontSize: 11,
+                                              ),
+                                            ),
+                                          const SizedBox(width: 8),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFF2C2C34),
+                                              borderRadius: BorderRadius.circular(4),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(payMeta.icon, size: 10, color: Colors.white60),
+                                                const SizedBox(width: 3),
+                                                Text(payMeta.label,
+                                                    style: const TextStyle(color: Colors.white60, fontSize: 10)),
+                                              ],
+                                            ),
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                            decoration: BoxDecoration(
+                                              color: (isGroupExp ? const Color(0xFF9B51E0) : const Color(0xFF2F80ED))
+                                                  .withValues(alpha: 0.15),
+                                              borderRadius: BorderRadius.circular(4),
+                                            ),
+                                            child: Text(
+                                              isGroupExp ? '👥 Group' : '👤 Personal',
+                                              style: TextStyle(
+                                                color: isGroupExp ? const Color(0xFF9B51E0) : const Color(0xFF2F80ED),
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Text(
+                                  _currFmt.format(amt / 100),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                const Icon(Icons.chevron_right, size: 16, color: Colors.white30),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  }),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _drillDownStatBox({
+    required String title,
+    required String value,
+    required Color valueColor,
+    required IconData icon,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF141419),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF282830)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 13, color: Colors.white38),
+              const SizedBox(width: 5),
+              Text(title, style: const TextStyle(color: Colors.white54, fontSize: 11)),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: TextStyle(
+              color: valueColor,
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
       ),
     );
   }

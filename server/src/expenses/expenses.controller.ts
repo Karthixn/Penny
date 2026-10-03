@@ -32,11 +32,19 @@ export class ExpensesController {
   findAll(
     @Req() req: any,
     @Query('groupId') groupId?: string,
+    @Query('category') category?: string,
+    @Query('type') type?: string,
+    @Query('year') year?: string,
+    @Query('month') month?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
     return this.expenses.findAll(req.user.userId, {
       groupId,
+      category,
+      type,
+      year: year ? parseInt(year, 10) : undefined,
+      month: month ? parseInt(month, 10) : undefined,
       page: page ? parseInt(page, 10) : undefined,
       limit: limit ? parseInt(limit, 10) : undefined,
     });

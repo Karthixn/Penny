@@ -16,6 +16,7 @@ export class UsersService {
         currency: true,
         monthlyBudget: true,
         isEmailVerified: true,
+        upiId: true,
         createdAt: true,
       },
     });
@@ -34,6 +35,7 @@ export class UsersService {
         currency: true,
         monthlyBudget: true,
         isEmailVerified: true,
+        upiId: true,
       },
     });
   }

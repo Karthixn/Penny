@@ -15,6 +15,7 @@ model User {
   currency      String    @default("INR")
   monthlyBudget Int       @default(2500000) @map("monthly_budget") // in paise
   isEmailVerified Boolean @default(false) @map("is_email_verified")
+  upiId         String?   @map("upi_id")
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
   deletedAt     DateTime? @map("deleted_at")
