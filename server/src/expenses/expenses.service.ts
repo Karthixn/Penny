@@ -132,21 +132,53 @@ export class ExpensesService {
       where: { id, deletedAt: null },
     });
     if (!expense) throw new NotFoundException('Expense not found');
-    if (expense.createdBy !== userId) throw new ForbiddenException();
+    if (expense.groupId) {
+      const isMember = await this.prisma.groupMember.findFirst({
+        where: { groupId: expense.groupId, userId, leftAt: null },
+      });
+      if (!isMember) throw new ForbiddenException();
+    } else {
+      if (expense.createdBy !== userId) throw new ForbiddenException();
+    }
 
-    return this.prisma.expense.update({
-      where: { id },
-      data: {
-        ...(dto.description && { description: dto.description }),
-        ...(dto.totalAmount && { totalAmount: dto.totalAmount }),
-        ...(dto.category && { category: dto.category }),
-        ...(dto.date && { date: new Date(dto.date) }),
-      },
-      include: {
-        payers: { include: { user: { select: { id: true, displayName: true, email: true } } } },
-        splits: { include: { user: { select: { id: true, displayName: true, email: true } } } },
-        creator: { select: { id: true, displayName: true, email: true } },
-      },
+    return this.prisma.$transaction(async (tx) => {
+      if (dto.payers?.length) {
+        await tx.expensePayer.deleteMany({ where: { expenseId: id } });
+        await tx.expensePayer.createMany({
+          data: dto.payers.map((p) => ({
+            expenseId: id,
+            userId: p.userId,
+            amount: p.amount,
+          })),
+        });
+      }
+
+      if (dto.splits?.length) {
+        await tx.expenseSplit.deleteMany({ where: { expenseId: id } });
+        await tx.expenseSplit.createMany({
+          data: dto.splits.map((s) => ({
+            expenseId: id,
+            userId: s.userId,
+            amount: s.amount,
+            splitMethod: s.splitMethod,
+          })),
+        });
+      }
+
+      return tx.expense.update({
+        where: { id },
+        data: {
+          ...(dto.description && { description: dto.description }),
+          ...(dto.totalAmount && { totalAmount: dto.totalAmount }),
+          ...(dto.category && { category: dto.category }),
+          ...(dto.date && { date: new Date(dto.date) }),
+        },
+        include: {
+          payers: { include: { user: { select: { id: true, displayName: true, email: true } } } },
+          splits: { include: { user: { select: { id: true, displayName: true, email: true } } } },
+          creator: { select: { id: true, displayName: true, email: true } },
+        },
+      });
     });
   }
 
@@ -155,7 +187,14 @@ export class ExpensesService {
       where: { id, deletedAt: null },
     });
     if (!expense) throw new NotFoundException('Expense not found');
-    if (expense.createdBy !== userId) throw new ForbiddenException();
+    if (expense.groupId) {
+      const isMember = await this.prisma.groupMember.findFirst({
+        where: { groupId: expense.groupId, userId, leftAt: null },
+      });
+      if (!isMember) throw new ForbiddenException();
+    } else {
+      if (expense.createdBy !== userId) throw new ForbiddenException();
+    }
 
     await this.prisma.expense.update({
       where: { id },

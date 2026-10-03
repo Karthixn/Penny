@@ -1,4 +1,14 @@
-import { IsString, IsInt, IsOptional, IsDateString, Min } from 'class-validator';
+import {
+  IsString,
+  IsInt,
+  IsOptional,
+  IsDateString,
+  IsArray,
+  ValidateNested,
+  Min,
+} from 'class-validator';
+import { Type } from 'class-transformer';
+import { PayerDto, SplitDto } from './create-expense.dto.js';
 
 export class UpdateExpenseDto {
   @IsOptional()
@@ -17,4 +27,16 @@ export class UpdateExpenseDto {
   @IsOptional()
   @IsDateString()
   date?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PayerDto)
+  payers?: PayerDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SplitDto)
+  splits?: SplitDto[];
 }

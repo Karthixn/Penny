@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -429,15 +430,39 @@ class _OverviewTab extends ConsumerWidget {
     final expensesAsync = ref.watch(_groupExpensesProvider(groupId));
     final settlementsAsync = ref.watch(_groupSettlementsProvider(groupId));
     final debtsAsync = ref.watch(settlementOptimizeProvider(groupId));
+    final detailAsync = ref.watch(groupDetailProvider(groupId));
+    final balances = detailAsync.value?.balances ?? [];
 
     return RefreshIndicator(
       color: const Color(0xFFF2994A),
       onRefresh: () async => onRefresh(),
       child: ListView(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        padding: EdgeInsets.zero,
         children: [
-          // Section 1: Recent Expenses & Settlements List
-          expensesAsync.when(
+          // Visual Member Debt Circles (matching Settle Up screenshot)
+          _GroupCirclesWidget(balances: balances),
+
+          // Group Switcher Tabs (matching Settle Up screenshot: e.g. "3 IDIOTS", "HSTL", "+")
+          _GroupSwitcherBar(currentGroupId: groupId),
+
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.only(top: 4, bottom: 10),
+                  child: Text(
+                    'Transactions',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                // Section 1: Recent Expenses & Settlements List
+                expensesAsync.when(
             loading: () => const Center(
               child: Padding(
                 padding: EdgeInsets.symmetric(vertical: 24),
@@ -684,11 +709,13 @@ class _OverviewTab extends ConsumerWidget {
               );
             },
           ),
-
-          const SizedBox(height: 80), // Extra space for FAB
         ],
       ),
-    );
+    ),
+    const SizedBox(height: 80), // Extra space for FAB
+  ],
+),
+);
   }
 
   Widget _buildExpenseCard(BuildContext context, Map<String, dynamic> exp) {
@@ -1322,3 +1349,261 @@ class _MembersTab extends StatelessWidget {
     );
   }
 }
+
+// ==========================================
+// 4. VISUAL GROUP CIRCLES WIDGET (Settle Up Style)
+// ==========================================
+class _GroupCirclesWidget extends StatelessWidget {
+  final List<Map<String, dynamic>> balances;
+
+  const _GroupCirclesWidget({required this.balances});
+
+  @override
+  Widget build(BuildContext context) {
+    if (balances.isEmpty) {
+      return Container(
+        height: 200,
+        alignment: Alignment.center,
+        color: Colors.black,
+        child: const Text('Add group expenses to see debt circles', style: TextStyle(color: Colors.white38)),
+      );
+    }
+
+    // Sort balances ascending: most negative first (biggest debtor)
+    final sorted = List<Map<String, dynamic>>.from(balances)
+      ..sort((a, b) => ((a['balance'] as num?)?.toInt() ?? 0).compareTo((b['balance'] as num?)?.toInt() ?? 0));
+
+    final primaryDebtor = sorted.first;
+    final primaryBalance = (primaryDebtor['balance'] as num?)?.toInt() ?? 0;
+    final hasDebts = primaryBalance < 0;
+
+    final otherMembers = sorted.sublist(1);
+
+    return Container(
+      height: 270,
+      width: double.infinity,
+      color: Colors.black,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final centerX = constraints.maxWidth / 2;
+          const centerY = 135.0;
+
+          return Stack(
+            alignment: Alignment.center,
+            clipBehavior: Clip.none,
+            children: [
+              // Surrounding member bubbles
+              for (int i = 0; i < otherMembers.length; i++)
+                _buildSurroundingBubble(otherMembers[i], i, otherMembers.length, centerX, centerY),
+
+              // Center primary debtor bubble (or all settled up bubble)
+              _buildCenterBubble(primaryDebtor, primaryBalance, hasDebts, centerX, centerY),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildSurroundingBubble(Map<String, dynamic> item, int index, int total, double cx, double cy) {
+    final balancePaise = (item['balance'] as num?)?.toInt() ?? 0;
+    final user = item['user'] as Map<String, dynamic>? ?? {};
+    final name = (user['displayName'] ?? user['email'] ?? 'Member').toString();
+
+    final absPaise = balancePaise.abs();
+    final double radius = (38.0 + (absPaise / 100000.0) * 14.0).clamp(34.0, 52.0);
+
+    final double angle = -math.pi / 2 + (2 * math.pi * index / total) + 0.35;
+    final double dist = 94.0;
+    final double x = cx + dist * math.cos(angle) - radius;
+    final double y = cy + dist * math.sin(angle) - radius;
+
+    final isNegative = balancePaise < 0;
+    final isPositive = balancePaise > 0;
+
+    final bubbleColor = isNegative
+        ? const Color(0xFFD35400).withValues(alpha: 0.85)
+        : isPositive
+            ? const Color(0xFF4E342E).withValues(alpha: 0.88)
+            : const Color(0xFF2C2C34);
+
+    final borderColor = isNegative
+        ? const Color(0xFFE67E22).withValues(alpha: 0.6)
+        : isPositive
+            ? const Color(0xFF8D6E63).withValues(alpha: 0.6)
+            : Colors.white12;
+
+    return Positioned(
+      left: x,
+      top: y,
+      child: Container(
+        width: radius * 2,
+        height: radius * 2,
+        decoration: BoxDecoration(
+          color: bubbleColor,
+          shape: BoxShape.circle,
+          border: Border.all(color: borderColor, width: 1.5),
+          boxShadow: [
+            BoxShadow(
+              color: bubbleColor.withValues(alpha: 0.25),
+              blurRadius: 10,
+              spreadRadius: 1,
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.all(4),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              name,
+              style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 2),
+            Text(
+              isNegative
+                  ? '-₹${(-balancePaise / 100).toStringAsFixed(balancePaise % 100 == 0 ? 0 : 2)}'
+                  : isPositive
+                      ? '+₹${(balancePaise / 100).toStringAsFixed(balancePaise % 100 == 0 ? 0 : 2)}'
+                      : '₹0',
+              style: TextStyle(
+                color: isNegative ? const Color(0xFFFFCC80) : Colors.white70,
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+              ),
+              maxLines: 1,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCenterBubble(Map<String, dynamic> item, int balancePaise, bool hasDebts, double cx, double cy) {
+    final user = item['user'] as Map<String, dynamic>? ?? {};
+    final name = (user['displayName'] ?? user['email'] ?? 'Member').toString();
+    const double radius = 56.0;
+
+    return Positioned(
+      left: cx - radius,
+      top: cy - radius,
+      child: Container(
+        width: radius * 2,
+        height: radius * 2,
+        decoration: BoxDecoration(
+          color: hasDebts ? const Color(0xFFE67E22).withValues(alpha: 0.95) : const Color(0xFF4CAF50).withValues(alpha: 0.9),
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white.withValues(alpha: 0.5), width: 2),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFFE67E22).withValues(alpha: 0.5),
+              blurRadius: 16,
+              spreadRadius: 3,
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.all(6),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              name,
+              style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w800),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 2),
+            Text(
+              balancePaise < 0
+                  ? '-₹${(-balancePaise / 100).toStringAsFixed(2)}'
+                  : '₹${(balancePaise / 100).toStringAsFixed(2)}',
+              style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+              maxLines: 1,
+            ),
+            if (hasDebts) ...[
+              const SizedBox(height: 1),
+              const Text(
+                'should pay',
+                style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w500, fontStyle: FontStyle.italic),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ==========================================
+// 5. GROUP SWITCHER BAR (Tabs for switching groups)
+// ==========================================
+class _GroupSwitcherBar extends ConsumerWidget {
+  final String currentGroupId;
+
+  const _GroupSwitcherBar({required this.currentGroupId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final groupList = ref.watch(groupListProvider);
+    final groups = groupList.groups;
+
+    return Container(
+      height: 44,
+      color: Colors.black,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        children: [
+          for (final g in groups) ...[
+            Builder(builder: (ctx) {
+              final gid = (g['id'] ?? '') as String;
+              final gname = (g['name'] ?? 'Group').toString().toUpperCase();
+              final isCurrent = gid == currentGroupId;
+
+              return InkWell(
+                onTap: () {
+                  if (!isCurrent && gid.isNotEmpty) {
+                    context.pushReplacement('/groups/$gid');
+                  }
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    border: Border(
+                      bottom: BorderSide(
+                        color: isCurrent ? Colors.white : Colors.transparent,
+                        width: 2.5,
+                      ),
+                    ),
+                  ),
+                  child: Text(
+                    gname,
+                    style: TextStyle(
+                      color: isCurrent ? Colors.white : Colors.white54,
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ],
+          IconButton(
+            icon: const Icon(Icons.add, color: Colors.white70, size: 20),
+            tooltip: 'All Groups',
+            onPressed: () {
+              context.push('/groups');
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
