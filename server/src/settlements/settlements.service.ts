@@ -79,10 +79,14 @@ export class SettlementsService {
   async create(userId: string, dto: CreateSettlementDto) {
     await this.assertMember(userId, dto.groupId);
 
+    const payerId = dto.payerId ?? userId;
+    await this.assertMember(payerId, dto.groupId);
+    await this.assertMember(dto.payeeId, dto.groupId);
+
     return this.prisma.settlement.create({
       data: {
         groupId: dto.groupId,
-        payerId: userId,
+        payerId: payerId,
         payeeId: dto.payeeId,
         amount: dto.amount,
         note: dto.note ?? null,

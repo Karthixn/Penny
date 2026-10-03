@@ -4,6 +4,10 @@ export class CreateSettlementDto {
   @IsUUID()
   groupId!: string;
 
+  @IsOptional()
+  @IsUUID()
+  payerId?: string;
+
   @IsUUID()
   payeeId!: string;
 

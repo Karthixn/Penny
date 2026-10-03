@@ -1202,12 +1202,21 @@ class _OverviewTab extends ConsumerWidget {
     Map<String, dynamic> toUser,
     int amountPaise,
   ) {
-    final fromName = fromUser['displayName'] ?? 'User';
-    final toName = toUser['displayName'] ?? 'User';
-    final payeeId = toUser['id'] as String?;
+    final userState = ref.read(userProvider);
+    final currentUserId = (userState.profile?['id'] ?? '').toString();
+    final currentUserName = (userState.profile?['displayName'] ?? 'You').toString();
+
+    final fromId = (fromUser['id'] ?? fromUser['_id'] ?? '').toString();
+    final toId = (toUser['id'] ?? toUser['_id'] ?? '').toString();
+    final fromName = fromUser['displayName'] ?? fromUser['email'] ?? 'Member';
+    final toName = toUser['displayName'] ?? toUser['email'] ?? 'Member';
+
+    final isMeDebtor = currentUserId.isNotEmpty && currentUserId == fromId;
+    final isMeCreditor = currentUserId.isNotEmpty && currentUserId == toId;
 
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       backgroundColor: const Color(0xFF1E1E24),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -1223,9 +1232,36 @@ class _OverviewTab extends ConsumerWidget {
               decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
             ),
             const SizedBox(height: 18),
-            const Text(
-              'Record Debt Settlement',
-              style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+            Text(
+              isMeCreditor
+                  ? 'Payment Due to You'
+                  : (isMeDebtor ? 'Pay Your Debt' : 'Record Debt Settlement'),
+              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: (isMeCreditor
+                        ? const Color(0xFF00D68F)
+                        : (isMeDebtor ? const Color(0xFFEF4444) : const Color(0xFFF2994A)))
+                    .withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                isMeCreditor
+                    ? '$fromName owes you ${_fmt(amountPaise)}'
+                    : (isMeDebtor
+                        ? 'You owe $toName ${_fmt(amountPaise)}'
+                        : '$fromName owes $toName ${_fmt(amountPaise)}'),
+                style: TextStyle(
+                  color: isMeCreditor
+                      ? const Color(0xFF00D68F)
+                      : (isMeDebtor ? const Color(0xFFEF4444) : const Color(0xFFF2994A)),
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
             const SizedBox(height: 16),
             Container(
@@ -1261,170 +1297,504 @@ class _OverviewTab extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: 20),
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF00D68F),
-                foregroundColor: Colors.black,
-                minimumSize: const Size(double.infinity, 50),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-              ),
-              icon: const Icon(Icons.bolt, size: 22),
-              label: const Text('Pay Now (GPay / UPI)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              onPressed: () async {
-                Navigator.pop(ctx);
-                String vpa = (toUser['upiId'] as String? ?? '').trim();
-                if (vpa.isEmpty) {
-                  final ctl = TextEditingController();
-                  final entered = await showDialog<String>(
+
+            if (isMeCreditor) ...[
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF00D68F),
+                  foregroundColor: Colors.black,
+                  minimumSize: const Size(double.infinity, 50),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+                icon: const Icon(Icons.check_circle_outline, size: 22),
+                label: Text('Mark as Received (${_fmt(amountPaise)})',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                onPressed: () async {
+                  Navigator.pop(ctx);
+                  final confirmed = await showDialog<bool>(
                     context: context,
                     builder: (dCtx) => AlertDialog(
                       backgroundColor: const Color(0xFF1E1E24),
-                      title: Text('Pay $toName via UPI', style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold)),
-                      content: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('Enter payee UPI ID or phone number (e.g. 9876543210@paytm, name@okhdfcbank):', style: TextStyle(color: Colors.white70, fontSize: 13)),
-                          const SizedBox(height: 12),
-                          TextField(
-                            controller: ctl,
-                            autofocus: true,
-                            style: const TextStyle(color: Colors.white),
-                            decoration: InputDecoration(
-                              hintText: 'user@upi or 9876543210@paytm',
-                              hintStyle: const TextStyle(color: Colors.white38),
-                              prefixIcon: const Icon(Icons.bolt, color: Color(0xFF00D68F)),
-                              filled: true,
-                              fillColor: const Color(0xFF282830),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                            ),
-                          ),
-                        ],
+                      title: const Text('Confirm Payment Received', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                      content: Text(
+                        'Did $fromName pay you ${_fmt(amountPaise)} in cash, UPI, or other means?',
+                        style: const TextStyle(color: Colors.white70),
                       ),
                       actions: [
-                        TextButton(onPressed: () => Navigator.pop(dCtx), child: const Text('Cancel', style: TextStyle(color: Colors.white54))),
+                        TextButton(
+                          onPressed: () => Navigator.pop(dCtx, false),
+                          child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+                        ),
                         ElevatedButton(
                           style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00D68F)),
-                          onPressed: () => Navigator.pop(dCtx, ctl.text.trim()),
-                          child: const Text('Open UPI App', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                          onPressed: () => Navigator.pop(dCtx, true),
+                          child: const Text('Yes, Received', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
                         ),
                       ],
                     ),
                   );
-                  if (entered == null || entered.isEmpty) return;
-                  vpa = entered;
-                }
-
-                final amountInr = (amountPaise / 100).toStringAsFixed(2);
-                final upiUri = Uri.parse(
-                  'upi://pay?pa=$vpa&pn=${Uri.encodeComponent(toName)}&am=$amountInr&cu=INR&tn=${Uri.encodeComponent('Penny settlement')}',
-                );
-
-                try {
-                  final launched = await launchUrl(upiUri, mode: LaunchMode.externalApplication);
-                  if (!launched) {
+                  if (confirmed == true) {
+                    try {
+                      await ref.read(settlementsApiProvider).create({
+                        'groupId': groupId,
+                        'payerId': fromId,
+                        'payeeId': toId,
+                        'amount': amountPaise,
+                        'note': 'Confirmed received by $toName',
+                      });
+                      onRefresh();
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Payment of ${_fmt(amountPaise)} marked as received!'),
+                            backgroundColor: const Color(0xFF00D68F),
+                          ),
+                        );
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Failed: $e'), backgroundColor: Colors.redAccent),
+                        );
+                      }
+                    }
+                  }
+                },
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Color(0xFFF2994A)),
+                        minimumSize: const Size(0, 46),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      icon: const Icon(Icons.share_outlined, size: 16, color: Color(0xFFF2994A)),
+                      label: Text('Remind $fromName',
+                          style: const TextStyle(color: Color(0xFFF2994A), fontWeight: FontWeight.w600, fontSize: 13)),
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _showRemindDialog(context, fromName, toName, amountPaise, toUser);
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Colors.white24),
+                        minimumSize: const Size(0, 46),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _showCustomAmountDialog(context, ref, fromId, toId, fromName, toName, amountPaise, isMeCreditor: true);
+                      },
+                      child: const Text('Part Received', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w600)),
+                    ),
+                  ),
+                ],
+              ),
+            ] else if (isMeDebtor) ...[
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF00D68F),
+                  foregroundColor: Colors.black,
+                  minimumSize: const Size(double.infinity, 50),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+                icon: const Icon(Icons.bolt, size: 22),
+                label: const Text('Pay Now (GPay / UPI)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                onPressed: () async {
+                  Navigator.pop(ctx);
+                  await _launchUpiAndConfirm(context, ref, fromId, toId, fromName, toName, toUser, amountPaise);
+                },
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Colors.white24),
+                        minimumSize: const Size(0, 46),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      onPressed: () async {
+                        Navigator.pop(ctx);
+                        try {
+                          await ref.read(settlementsApiProvider).create({
+                            'groupId': groupId,
+                            'payerId': fromId,
+                            'payeeId': toId,
+                            'amount': amountPaise,
+                            'note': 'Paid in cash',
+                          });
+                          onRefresh();
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Settlement of ${_fmt(amountPaise)} recorded!'),
+                                backgroundColor: const Color(0xFF4CAF50),
+                              ),
+                            );
+                          }
+                        } catch (err) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Failed: $err'), backgroundColor: Colors.redAccent),
+                            );
+                          }
+                        }
+                      },
+                      child: const Text('I Paid via Cash', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w600)),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Color(0xFFF2994A)),
+                        minimumSize: const Size(0, 46),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _showCustomAmountDialog(context, ref, fromId, toId, fromName, toName, amountPaise, isMeCreditor: false);
+                      },
+                      child: const Text('Part Pay', style: TextStyle(color: Color(0xFFF2994A), fontWeight: FontWeight.w600)),
+                    ),
+                  ),
+                ],
+              ),
+            ] else ...[
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF2F80ED),
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(double.infinity, 50),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+                icon: const Icon(Icons.check, size: 22),
+                label: Text('Record: $fromName Paid $toName',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                onPressed: () async {
+                  Navigator.pop(ctx);
+                  try {
+                    await ref.read(settlementsApiProvider).create({
+                      'groupId': groupId,
+                      'payerId': fromId,
+                      'payeeId': toId,
+                      'amount': amountPaise,
+                      'note': 'Settled by $currentUserName on behalf of $fromName',
+                    });
+                    onRefresh();
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Could not open UPI app. Make sure Google Pay or PhonePe is installed.')),
+                        SnackBar(
+                          content: Text('Settlement between $fromName and $toName recorded!'),
+                          backgroundColor: const Color(0xFF4CAF50),
+                        ),
                       );
                     }
-                  } else {
-                    if (!context.mounted) return;
-                    showDialog(
-                      context: context,
-                      builder: (cCtx) => AlertDialog(
-                        backgroundColor: const Color(0xFF1E1E24),
-                        title: const Text('Confirm Settlement?', style: TextStyle(color: Colors.white)),
-                        content: Text('Did your payment of ₹$amountInr to $toName succeed in Google Pay / UPI?', style: const TextStyle(color: Colors.white70)),
-                        actions: [
-                          TextButton(onPressed: () => Navigator.pop(cCtx), child: const Text('Not Yet', style: TextStyle(color: Colors.white54))),
-                          ElevatedButton(
-                            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00D68F)),
-                            onPressed: () async {
-                              Navigator.pop(cCtx);
-                              if (payeeId != null) {
-                                await ref.read(settlementsApiProvider).create({
-                                  'groupId': groupId,
-                                  'payeeId': payeeId,
-                                  'amount': amountPaise,
-                                  'note': 'Paid via GPay/UPI',
-                                });
-                                onRefresh();
-                              }
-                            },
-                            child: const Text('Yes, Record Settlement', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-                          ),
-                        ],
-                      ),
-                    );
+                  } catch (err) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Failed: $err'), backgroundColor: Colors.redAccent),
+                      );
+                    }
                   }
-                } catch (e) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('UPI error: $e'), backgroundColor: Colors.redAccent));
-                  }
-                }
-              },
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: Colors.white24),
-                      minimumSize: const Size(0, 46),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    onPressed: () async {
-                      Navigator.pop(ctx);
-                      if (payeeId == null) return;
-                      try {
-                        await ref.read(settlementsApiProvider).create({
-                          'groupId': groupId,
-                          'payeeId': payeeId,
-                          'amount': amountPaise,
-                        });
-                        onRefresh();
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Settlement of ${_fmt(amountPaise)} recorded!'),
-                              backgroundColor: const Color(0xFF4CAF50),
-                            ),
-                          );
-                        }
-                      } catch (err) {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Failed: $err'), backgroundColor: Colors.redAccent),
-                          );
-                        }
-                      }
-                    },
-                    child: const Text('Record Cash', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w600)),
-                  ),
+                },
+              ),
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Color(0xFF00D68F)),
+                  minimumSize: const Size(double.infinity, 46),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: OutlinedButton(
-                    style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: Color(0xFFF2994A)),
-                      minimumSize: const Size(0, 46),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    onPressed: () {
-                      Navigator.pop(ctx);
-                      context.push('/settle/$groupId');
-                    },
-                    child: const Text('Part Pay', style: TextStyle(color: Color(0xFFF2994A), fontWeight: FontWeight.w600)),
-                  ),
-                ),
-              ],
-            ),
+                icon: const Icon(Icons.bolt, color: Color(0xFF00D68F), size: 18),
+                label: Text('Pay on Behalf of $fromName (GPay / UPI)',
+                    style: const TextStyle(color: Color(0xFF00D68F), fontWeight: FontWeight.bold, fontSize: 14)),
+                onPressed: () async {
+                  Navigator.pop(ctx);
+                  await _launchUpiAndConfirm(
+                    context,
+                    ref,
+                    fromId,
+                    toId,
+                    fromName,
+                    toName,
+                    toUser,
+                    amountPaise,
+                    note: 'Paid by $currentUserName on behalf of $fromName',
+                  );
+                },
+              ),
+            ],
           ],
         ),
       ),
     );
+  }
+
+  void _showRemindDialog(
+    BuildContext context,
+    String debtorName,
+    String myName,
+    int amountPaise,
+    Map<String, dynamic> myUser,
+  ) {
+    final amountInr = (amountPaise / 100).toStringAsFixed(2);
+    final myUpi = (myUser['upiId'] as String? ?? '').trim();
+    final upiSuffix = myUpi.isNotEmpty ? '\nUPI ID: $myUpi' : '';
+    final message = 'Hi $debtorName, please settle your group balance of ₹$amountInr on Penny!$upiSuffix';
+
+    showDialog(
+      context: context,
+      builder: (dCtx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E24),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('Remind $debtorName', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Send a payment reminder for ₹$amountInr:', style: const TextStyle(color: Colors.white70)),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF282830),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(message, style: const TextStyle(color: Colors.white, fontSize: 13)),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dCtx),
+            child: const Text('Close', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF25D366)),
+            icon: const Icon(Icons.chat, color: Colors.black, size: 16),
+            label: const Text('WhatsApp', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+            onPressed: () async {
+              Navigator.pop(dCtx);
+              final waUri = Uri.parse('whatsapp://send?text=${Uri.encodeComponent(message)}');
+              try {
+                await launchUrl(waUri, mode: LaunchMode.externalApplication);
+              } catch (_) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Could not open WhatsApp')),
+                  );
+                }
+              }
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showCustomAmountDialog(
+    BuildContext context,
+    WidgetRef ref,
+    String fromId,
+    String toId,
+    String fromName,
+    String toName,
+    int maxPaise, {
+    required bool isMeCreditor,
+  }) {
+    final ctl = TextEditingController(text: (maxPaise / 100).toStringAsFixed(0));
+    showDialog(
+      context: context,
+      builder: (dCtx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E24),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(isMeCreditor ? 'Record Partial Received' : 'Record Partial Payment',
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 17)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              isMeCreditor
+                  ? 'Enter amount received from $fromName:'
+                  : 'Enter amount paid to $toName:',
+              style: const TextStyle(color: Colors.white70, fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: ctl,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+              decoration: InputDecoration(
+                prefixText: '₹ ',
+                prefixStyle: const TextStyle(color: Color(0xFFF2994A), fontSize: 20, fontWeight: FontWeight.bold),
+                filled: true,
+                fillColor: const Color(0xFF282830),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dCtx),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00D68F)),
+            onPressed: () async {
+              final val = double.tryParse(ctl.text.trim()) ?? 0;
+              final enteredPaise = (val * 100).round();
+              if (enteredPaise <= 0) return;
+              Navigator.pop(dCtx);
+              try {
+                await ref.read(settlementsApiProvider).create({
+                  'groupId': groupId,
+                  'payerId': fromId,
+                  'payeeId': toId,
+                  'amount': enteredPaise,
+                  'note': isMeCreditor ? 'Partial amount received' : 'Partial payment',
+                });
+                onRefresh();
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Partial settlement of ${_fmt(enteredPaise)} recorded!'),
+                      backgroundColor: const Color(0xFF00D68F),
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Failed: $e'), backgroundColor: Colors.redAccent),
+                  );
+                }
+              }
+            },
+            child: const Text('Confirm', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _launchUpiAndConfirm(
+    BuildContext context,
+    WidgetRef ref,
+    String fromId,
+    String toId,
+    String fromName,
+    String toName,
+    Map<String, dynamic> toUser,
+    int amountPaise, {
+    String? note,
+  }) async {
+    String vpa = (toUser['upiId'] as String? ?? '').trim();
+    if (vpa.isEmpty) {
+      final ctl = TextEditingController();
+      final entered = await showDialog<String>(
+        context: context,
+        builder: (dCtx) => AlertDialog(
+          backgroundColor: const Color(0xFF1E1E24),
+          title: Text('Pay $toName via UPI', style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Enter payee UPI ID or phone number (e.g. 9876543210@paytm, name@okhdfcbank):', style: TextStyle(color: Colors.white70, fontSize: 13)),
+              const SizedBox(height: 12),
+              TextField(
+                controller: ctl,
+                autofocus: true,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  hintText: 'user@upi or 9876543210@paytm',
+                  hintStyle: const TextStyle(color: Colors.white38),
+                  prefixIcon: const Icon(Icons.bolt, color: Color(0xFF00D68F)),
+                  filled: true,
+                  fillColor: const Color(0xFF282830),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dCtx), child: const Text('Cancel', style: TextStyle(color: Colors.white54))),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00D68F)),
+              onPressed: () => Navigator.pop(dCtx, ctl.text.trim()),
+              child: const Text('Open UPI App', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      );
+      if (entered == null || entered.isEmpty) return;
+      vpa = entered;
+    }
+
+    final amountInr = (amountPaise / 100).toStringAsFixed(2);
+    final upiUri = Uri.parse(
+      'upi://pay?pa=$vpa&pn=${Uri.encodeComponent(toName)}&am=$amountInr&cu=INR&tn=${Uri.encodeComponent('Penny settlement')}',
+    );
+
+    try {
+      final launched = await launchUrl(upiUri, mode: LaunchMode.externalApplication);
+      if (!launched) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Could not open UPI app. Make sure Google Pay or PhonePe is installed.')),
+          );
+        }
+      } else {
+        if (!context.mounted) return;
+        showDialog(
+          context: context,
+          builder: (cCtx) => AlertDialog(
+            backgroundColor: const Color(0xFF1E1E24),
+            title: const Text('Confirm Settlement?', style: TextStyle(color: Colors.white)),
+            content: Text('Did your payment of ₹$amountInr to $toName succeed in Google Pay / UPI?', style: const TextStyle(color: Colors.white70)),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(cCtx), child: const Text('Not Yet', style: TextStyle(color: Colors.white54))),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00D68F)),
+                onPressed: () async {
+                  Navigator.pop(cCtx);
+                  await ref.read(settlementsApiProvider).create({
+                    'groupId': groupId,
+                    'payerId': fromId,
+                    'payeeId': toId,
+                    'amount': amountPaise,
+                    'note': note ?? 'Paid via GPay/UPI',
+                  });
+                  onRefresh();
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Settlement of ${_fmt(amountPaise)} recorded!'), backgroundColor: const Color(0xFF00D68F)),
+                    );
+                  }
+                },
+                child: const Text('Yes, Record Settlement', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('UPI error: $e'), backgroundColor: Colors.redAccent));
+      }
+    }
   }
 }
 

@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme/app_theme.dart';
 import '../../providers/settlements_provider.dart';
 import '../../providers/groups_provider.dart';
+import '../../providers/user_provider.dart';
 
 final _fmt = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 2);
 
@@ -15,11 +16,13 @@ class SettlementScreen extends ConsumerWidget {
   Future<void> _payViaUpi(
     BuildContext context,
     WidgetRef ref,
+    String payerId,
+    String payeeId,
     Map<String, dynamic> to,
-    int amountPaise,
-  ) async {
+    int amountPaise, {
+    String? note,
+  }) async {
     final payeeName = (to['displayName'] ?? to['email'] ?? 'Member').toString();
-    final payeeId = (to['id'] ?? to['_id']).toString();
     String vpa = (to['upiId'] as String? ?? '').trim();
 
     if (vpa.isEmpty) {
@@ -97,7 +100,7 @@ class SettlementScreen extends ConsumerWidget {
                 style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00D68F)),
                 onPressed: () {
                   Navigator.pop(ctx);
-                  _recordSettlement(context, ref, payeeId, amountPaise, 'Paid via GPay/UPI');
+                  _recordSettlement(context, ref, payerId, payeeId, amountPaise, note ?? 'Paid via GPay/UPI');
                 },
                 child: const Text('Yes, Record Settlement', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
               ),
@@ -117,6 +120,7 @@ class SettlementScreen extends ConsumerWidget {
   Future<void> _recordSettlement(
     BuildContext context,
     WidgetRef ref,
+    String payerId,
     String payeeId,
     int amountPaise,
     String? note,
@@ -124,13 +128,14 @@ class SettlementScreen extends ConsumerWidget {
     try {
       await ref.read(settlementsApiProvider).create({
         'groupId': groupId,
+        'payerId': payerId,
         'payeeId': payeeId,
         'amount': amountPaise,
         if (note != null && note.isNotEmpty) 'note': note,
       });
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Settlement recorded successfully!')),
+          const SnackBar(content: Text('Settlement recorded successfully!'), backgroundColor: Color(0xFF00D68F)),
         );
       }
       ref.invalidate(settlementOptimizeProvider(groupId));
@@ -147,11 +152,14 @@ class SettlementScreen extends ConsumerWidget {
   void _showPartPaymentDialog(
     BuildContext context,
     WidgetRef ref,
+    String payerId,
+    String payeeId,
     Map<String, dynamic> from,
     Map<String, dynamic> to,
-    int maxAmountPaise,
-  ) {
-    final amountController = TextEditingController(text: (maxAmountPaise / 100).toStringAsFixed(2));
+    int maxAmountPaise, {
+    required bool isMeCreditor,
+  }) {
+    final amountController = TextEditingController(text: (maxAmountPaise / 100).toStringAsFixed(0));
     final noteController = TextEditingController();
 
     showDialog(
@@ -159,16 +167,18 @@ class SettlementScreen extends ConsumerWidget {
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF1E1E24),
         title: Text(
-          'Part Payment to ${to['displayName'] ?? 'Member'}',
+          isMeCreditor
+              ? 'Record Partial Received'
+              : 'Part Payment to ${to['displayName'] ?? 'Member'}',
           style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Enter amount to settle now:',
-              style: TextStyle(color: Colors.white70, fontSize: 13),
+            Text(
+              isMeCreditor ? 'Enter amount received:' : 'Enter amount to settle now:',
+              style: const TextStyle(color: Colors.white70, fontSize: 13),
             ),
             const SizedBox(height: 8),
             TextField(
@@ -188,7 +198,7 @@ class SettlementScreen extends ConsumerWidget {
               controller: noteController,
               style: const TextStyle(color: Colors.white, fontSize: 14),
               decoration: InputDecoration(
-                hintText: 'Note (optional, e.g. GPay part 1)',
+                hintText: isMeCreditor ? 'Note (optional, e.g. Received part cash)' : 'Note (optional, e.g. GPay part 1)',
                 hintStyle: const TextStyle(color: Colors.white38),
                 filled: true,
                 fillColor: const Color(0xFF282830),
@@ -217,9 +227,12 @@ class SettlementScreen extends ConsumerWidget {
               _recordSettlement(
                 context,
                 ref,
-                (to['id'] ?? to['_id']) as String,
+                payerId,
+                payeeId,
                 enteredPaise,
-                noteController.text.trim(),
+                noteController.text.trim().isNotEmpty
+                    ? noteController.text.trim()
+                    : (isMeCreditor ? 'Partial amount received' : 'Partial payment'),
               );
             },
             child: const Text('Confirm', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
@@ -229,9 +242,74 @@ class SettlementScreen extends ConsumerWidget {
     );
   }
 
+  void _showRemindDialog(
+    BuildContext context,
+    String debtorName,
+    String myName,
+    int amountPaise,
+    Map<String, dynamic> myUser,
+  ) {
+    final amountInr = (amountPaise / 100).toStringAsFixed(2);
+    final myUpi = (myUser['upiId'] as String? ?? '').trim();
+    final upiSuffix = myUpi.isNotEmpty ? '\nUPI ID: $myUpi' : '';
+    final message = 'Hi $debtorName, please settle your group balance of ₹$amountInr on Penny!$upiSuffix';
+
+    showDialog(
+      context: context,
+      builder: (dCtx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E24),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('Remind $debtorName', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Send a payment reminder for ₹$amountInr:', style: const TextStyle(color: Colors.white70)),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF282830),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(message, style: const TextStyle(color: Colors.white, fontSize: 13)),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dCtx),
+            child: const Text('Close', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF25D366)),
+            icon: const Icon(Icons.chat, color: Colors.black, size: 16),
+            label: const Text('WhatsApp', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+            onPressed: () async {
+              Navigator.pop(dCtx);
+              final waUri = Uri.parse('whatsapp://send?text=${Uri.encodeComponent(message)}');
+              try {
+                await launchUrl(waUri, mode: LaunchMode.externalApplication);
+              } catch (_) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Could not open WhatsApp')),
+                  );
+                }
+              }
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final asyncSettlements = ref.watch(settlementOptimizeProvider(groupId));
+    final userState = ref.watch(userProvider);
+    final currentUserId = (userState.profile?['id'] ?? '').toString();
+    final currentUserName = (userState.profile?['displayName'] ?? 'You').toString();
 
     return Scaffold(
       appBar: AppBar(title: const Text('Settle Up')),
@@ -262,7 +340,14 @@ class SettlementScreen extends ConsumerWidget {
               final s = settlements[index];
               final from = s['from'] as Map<String, dynamic>;
               final to = s['to'] as Map<String, dynamic>;
+              final fromId = (from['id'] ?? from['_id'] ?? '').toString();
+              final toId = (to['id'] ?? to['_id'] ?? '').toString();
+              final fromName = (from['displayName'] ?? from['email'] ?? 'Member').toString();
+              final toName = (to['displayName'] ?? to['email'] ?? 'Member').toString();
               final amount = s['amount'] as int;
+
+              final isMeDebtor = currentUserId.isNotEmpty && currentUserId == fromId;
+              final isMeCreditor = currentUserId.isNotEmpty && currentUserId == toId;
 
               return Container(
                 margin: const EdgeInsets.only(bottom: 16),
@@ -274,6 +359,33 @@ class SettlementScreen extends ConsumerWidget {
                 ),
                 child: Column(
                   children: [
+                    // Role Badge
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: (isMeCreditor
+                                ? const Color(0xFF00D68F)
+                                : (isMeDebtor ? const Color(0xFFEF4444) : const Color(0xFFF2994A)))
+                            .withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        isMeCreditor
+                            ? '$fromName owes you ${_fmt.format(amount / 100)}'
+                            : (isMeDebtor
+                                ? 'You owe $toName ${_fmt.format(amount / 100)}'
+                                : '$fromName owes $toName ${_fmt.format(amount / 100)}'),
+                        style: TextStyle(
+                          color: isMeCreditor
+                              ? const Color(0xFF00D68F)
+                              : (isMeDebtor ? const Color(0xFFEF4444) : const Color(0xFFF2994A)),
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+
                     Row(
                       children: [
                         _Avatar(name: from['displayName'] ?? 'U'),
@@ -314,57 +426,162 @@ class SettlementScreen extends ConsumerWidget {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF00D68F),
-                        foregroundColor: Colors.black,
-                        minimumSize: const Size(double.infinity, 44),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
+
+                    // Role-aware buttons
+                    if (isMeCreditor) ...[
+                      // Current user is owed money by fromName
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF00D68F),
+                          foregroundColor: Colors.black,
+                          minimumSize: const Size(double.infinity, 44),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        icon: const Icon(Icons.check_circle_outline, size: 20),
+                        label: Text('Mark as Received (${_fmt.format(amount / 100)})',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                        onPressed: () async {
+                          final confirm = await showDialog<bool>(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              backgroundColor: const Color(0xFF1E1E24),
+                              title: const Text('Confirm Payment Received', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                              content: Text('Did $fromName pay you ${_fmt.format(amount / 100)}?', style: const TextStyle(color: Colors.white70)),
+                              actions: [
+                                TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel', style: TextStyle(color: Colors.white54))),
+                                ElevatedButton(
+                                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00D68F)),
+                                  onPressed: () => Navigator.pop(ctx, true),
+                                  child: const Text('Yes, Received', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (confirm == true && context.mounted) {
+                            _recordSettlement(context, ref, fromId, toId, amount, 'Confirmed received by $toName');
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                side: const BorderSide(color: Color(0xFFF2994A)),
+                                minimumSize: const Size(0, 40),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
+                              icon: const Icon(Icons.share_outlined, size: 15, color: Color(0xFFF2994A)),
+                              label: Text('Remind $fromName',
+                                  style: const TextStyle(color: Color(0xFFF2994A), fontWeight: FontWeight.w600, fontSize: 12)),
+                              onPressed: () => _showRemindDialog(context, fromName, toName, amount, to),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: OutlinedButton(
+                              style: OutlinedButton.styleFrom(
+                                side: const BorderSide(color: Colors.white24),
+                                minimumSize: const Size(0, 40),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
+                              onPressed: () => _showPartPaymentDialog(context, ref, fromId, toId, from, to, amount, isMeCreditor: true),
+                              child: const Text('Part Received', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w600, fontSize: 12)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ] else if (isMeDebtor) ...[
+                      // Current user owes money to toName
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF00D68F),
+                          foregroundColor: Colors.black,
+                          minimumSize: const Size(double.infinity, 44),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        icon: const Icon(Icons.bolt, size: 20),
+                        label: const Text('Pay Now (GPay / UPI)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                        onPressed: () => _payViaUpi(context, ref, fromId, toId, to, amount),
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              style: OutlinedButton.styleFrom(
+                                side: const BorderSide(color: Colors.white24),
+                                minimumSize: const Size(0, 40),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
+                              onPressed: () => _recordSettlement(
+                                context,
+                                ref,
+                                fromId,
+                                toId,
+                                amount,
+                                'Paid in cash',
+                              ),
+                              child: const Text('I Paid via Cash', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w600, fontSize: 13)),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: OutlinedButton(
+                              style: OutlinedButton.styleFrom(
+                                side: const BorderSide(color: Color(0xFFF2994A)),
+                                minimumSize: const Size(0, 40),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
+                              onPressed: () => _showPartPaymentDialog(context, ref, fromId, toId, from, to, amount, isMeCreditor: false),
+                              child: const Text('Part Pay', style: TextStyle(color: Color(0xFFF2994A), fontWeight: FontWeight.w600, fontSize: 13)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ] else ...[
+                      // Third-party: Amithabh owes Charlie, and user is viewing!
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF2F80ED),
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size(double.infinity, 44),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        icon: const Icon(Icons.check, size: 18),
+                        label: Text('Record: $fromName Paid $toName',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                        onPressed: () => _recordSettlement(
+                          context,
+                          ref,
+                          fromId,
+                          toId,
+                          amount,
+                          'Settled by $currentUserName on behalf of $fromName',
                         ),
                       ),
-                      icon: const Icon(Icons.bolt, size: 20),
-                      label: const Text('Pay Now (GPay / UPI)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                      onPressed: () => _payViaUpi(context, ref, to, amount),
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            style: OutlinedButton.styleFrom(
-                              side: const BorderSide(color: Colors.white24),
-                              minimumSize: const Size(0, 40),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                            ),
-                            onPressed: () => _recordSettlement(
-                              context,
-                              ref,
-                              (to['id'] ?? to['_id']) as String,
-                              amount,
-                              null,
-                            ),
-                            child: const Text('Record Full', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w600, fontSize: 13)),
-                          ),
+                      const SizedBox(height: 8),
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: Color(0xFF00D68F)),
+                          minimumSize: const Size(double.infinity, 40),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                         ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: OutlinedButton(
-                            style: OutlinedButton.styleFrom(
-                              side: const BorderSide(color: Color(0xFFF2994A)),
-                              minimumSize: const Size(0, 40),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                            ),
-                            onPressed: () => _showPartPaymentDialog(context, ref, from, to, amount),
-                            child: const Text('Part Pay', style: TextStyle(color: Color(0xFFF2994A), fontWeight: FontWeight.w600, fontSize: 13)),
-                          ),
+                        icon: const Icon(Icons.bolt, color: Color(0xFF00D68F), size: 16),
+                        label: Text('Pay on Behalf of $fromName (GPay / UPI)',
+                            style: const TextStyle(color: Color(0xFF00D68F), fontWeight: FontWeight.bold, fontSize: 13)),
+                        onPressed: () => _payViaUpi(
+                          context,
+                          ref,
+                          fromId,
+                          toId,
+                          to,
+                          amount,
+                          note: 'Paid by $currentUserName on behalf of $fromName',
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ],
                 ),
               );
@@ -383,11 +600,11 @@ class _Avatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return CircleAvatar(
-      radius: 22,
-      backgroundColor: AppColors.primary.withValues(alpha: 0.15),
+      radius: 18,
+      backgroundColor: AppColors.primary.withValues(alpha: 0.2),
       child: Text(
-        name[0].toUpperCase(),
-        style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700, fontSize: 16),
+        name.isNotEmpty ? name[0].toUpperCase() : '?',
+        style: const TextStyle(color: AppColors.primaryLight, fontWeight: FontWeight.w600),
       ),
     );
   }
