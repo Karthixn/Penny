@@ -15,7 +15,7 @@ class CategoryMeta {
 }
 
 class CategoryConstants {
-  static const List<CategoryMeta> all = [
+  static const List<CategoryMeta> expenseCategories = [
     CategoryMeta(
       id: 'food',
       label: 'Food & Dining',
@@ -77,6 +77,53 @@ class CategoryConstants {
       color: Color(0xFF94A3B8), // Slate Gray
     ),
   ];
+
+  static const List<CategoryMeta> incomeCategories = [
+    CategoryMeta(
+      id: 'salary',
+      label: 'Salary',
+      icon: Icons.work,
+      color: Color(0xFF00D68F), // Emerald Green
+    ),
+    CategoryMeta(
+      id: 'freelance',
+      label: 'Freelance & Projects',
+      icon: Icons.laptop_chromebook,
+      color: Color(0xFF3B82F6), // Electric Blue
+    ),
+    CategoryMeta(
+      id: 'investment',
+      label: 'Investments & Returns',
+      icon: Icons.trending_up,
+      color: Color(0xFF8B5CF6), // Purple
+    ),
+    CategoryMeta(
+      id: 'rental',
+      label: 'Rental Income',
+      icon: Icons.home,
+      color: Color(0xFFF59E0B), // Amber
+    ),
+    CategoryMeta(
+      id: 'cashback',
+      label: 'Cashback & Refunds',
+      icon: Icons.savings,
+      color: Color(0xFF06B6D4), // Cyan
+    ),
+    CategoryMeta(
+      id: 'gifts',
+      label: 'Gifts & Grants',
+      icon: Icons.card_giftcard,
+      color: Color(0xFFEC4899), // Pink
+    ),
+    CategoryMeta(
+      id: 'other_income',
+      label: 'Other Income',
+      icon: Icons.account_balance_wallet,
+      color: Color(0xFF94A3B8), // Gray
+    ),
+  ];
+
+  static List<CategoryMeta> get all => [...expenseCategories, ...incomeCategories];
 
   static final Map<String, CategoryMeta> _byId = {
     for (final c in all) c.id.toLowerCase(): c,

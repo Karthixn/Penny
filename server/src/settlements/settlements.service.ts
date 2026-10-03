@@ -85,6 +85,36 @@ export class SettlementsService {
         payerId: userId,
         payeeId: dto.payeeId,
         amount: dto.amount,
+        note: dto.note ?? null,
+        settledAt: new Date(),
+      },
+      include: {
+        payer: { select: { id: true, displayName: true, email: true } },
+        payee: { select: { id: true, displayName: true, email: true } },
+      },
+    });
+  }
+
+  async remove(userId: string, id: string) {
+    const settlement = await this.prisma.settlement.findUnique({ where: { id } });
+    if (!settlement) throw new NotFoundException('Settlement not found');
+    await this.assertMember(userId, settlement.groupId);
+
+    return this.prisma.settlement.delete({
+      where: { id },
+    });
+  }
+
+  async dispute(userId: string, id: string, dto: { isDisputed: boolean; disputeReason?: string }) {
+    const settlement = await this.prisma.settlement.findUnique({ where: { id } });
+    if (!settlement) throw new NotFoundException('Settlement not found');
+    await this.assertMember(userId, settlement.groupId);
+
+    return this.prisma.settlement.update({
+      where: { id },
+      data: {
+        isDisputed: dto.isDisputed,
+        disputeReason: dto.disputeReason ?? null,
       },
       include: {
         payer: { select: { id: true, displayName: true, email: true } },

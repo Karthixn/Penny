@@ -25,6 +25,26 @@ export class UpdateExpenseDto {
   category?: string;
 
   @IsOptional()
+  @IsString()
+  type?: string;
+
+  @IsOptional()
+  @IsString()
+  paymentMethod?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  tags?: string[];
+
+  @IsOptional()
+  isDisputed?: boolean;
+
+  @IsOptional()
+  @IsString()
+  disputeReason?: string;
+
+  @IsOptional()
   @IsDateString()
   date?: string;
 

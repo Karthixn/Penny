@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/constants/category_constants.dart';
+import '../../core/constants/payment_constants.dart';
 import '../../core/theme/app_theme.dart';
 import '../../providers/expenses_provider.dart';
 import '../../providers/groups_provider.dart';
@@ -20,7 +21,10 @@ class AddExpenseScreen extends ConsumerStatefulWidget {
 
 class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
   String _amount = '0';
+  String _type = 'expense'; // 'expense' | 'income'
   String _selectedCategory = 'food';
+  String _selectedPaymentMethod = 'upi';
+  final Set<String> _tags = {};
   final _descController = TextEditingController();
   bool _saving = false;
 
@@ -255,6 +259,48 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
     }
   }
 
+  void _showAddTagDialog() {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E24),
+        title: const Text('Add Tag', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          style: const TextStyle(color: Colors.white),
+          decoration: InputDecoration(
+            hintText: 'e.g. online, swiggy, trip',
+            hintStyle: const TextStyle(color: Colors.white38),
+            prefixText: '#',
+            prefixStyle: const TextStyle(color: Color(0xFFF2994A), fontWeight: FontWeight.bold),
+            filled: true,
+            fillColor: const Color(0xFF282830),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFF2994A)),
+            onPressed: () {
+              final text = controller.text.trim().replaceAll('#', '').toLowerCase();
+              if (text.isNotEmpty) {
+                setState(() => _tags.add(text));
+              }
+              Navigator.pop(ctx);
+            },
+            child: const Text('Add', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _save() async {
     final amountVal = double.tryParse(_amount) ?? 0;
     if (amountVal <= 0) {
@@ -288,6 +334,9 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
         'description': desc,
         'totalAmount': totalPaise,
         'category': _selectedCategory,
+        'type': widget.groupId != null ? 'expense' : _type,
+        'paymentMethod': _selectedPaymentMethod,
+        'tags': _tags.toList(),
       };
 
       if (widget.groupId != null) {
@@ -446,14 +495,117 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
               ),
             ),
 
+            // Transaction Type Toggle (Expense vs Income for personal transactions)
+            if (!isGroup) ...[
+              Container(
+                margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E1E24),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _type = 'expense';
+                            if (!CategoryConstants.expenseCategories.any((c) => c.id == _selectedCategory)) {
+                              _selectedCategory = 'food';
+                            }
+                          });
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          decoration: BoxDecoration(
+                            color: _type == 'expense' ? const Color(0xFFEF4444).withValues(alpha: 0.2) : Colors.transparent,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: _type == 'expense' ? const Color(0xFFEF4444) : Colors.transparent,
+                              width: 1.5,
+                            ),
+                          ),
+                          alignment: Alignment.center,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.arrow_upward, size: 16, color: _type == 'expense' ? const Color(0xFFEF4444) : Colors.white54),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Expense',
+                                style: TextStyle(
+                                  color: _type == 'expense' ? Colors.white : Colors.white54,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _type = 'income';
+                            if (!CategoryConstants.incomeCategories.any((c) => c.id == _selectedCategory)) {
+                              _selectedCategory = 'salary';
+                            }
+                          });
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          decoration: BoxDecoration(
+                            color: _type == 'income' ? const Color(0xFF00D68F).withValues(alpha: 0.2) : Colors.transparent,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: _type == 'income' ? const Color(0xFF00D68F) : Colors.transparent,
+                              width: 1.5,
+                            ),
+                          ),
+                          alignment: Alignment.center,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.arrow_downward, size: 16, color: _type == 'income' ? const Color(0xFF00D68F) : Colors.white54),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Income',
+                                style: TextStyle(
+                                  color: _type == 'income' ? Colors.white : Colors.white54,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
             // Category picker
+            Padding(
+              padding: const EdgeInsets.only(left: 16, top: 12, bottom: 4),
+              child: Text(
+                _type == 'income' ? 'Income Category' : 'Category',
+                style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold),
+              ),
+            ),
             Container(
-              height: 48,
-              margin: const EdgeInsets.only(top: 12),
+              height: 44,
+              margin: const EdgeInsets.only(top: 4),
               child: ListView(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                children: CategoryConstants.all.map((c) {
+                children: (_type == 'income' ? CategoryConstants.incomeCategories : CategoryConstants.expenseCategories).map((c) {
                   final isSel = c.id == _selectedCategory;
                   return Padding(
                     padding: const EdgeInsets.only(right: 8),
@@ -486,6 +638,102 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                     ),
                   );
                 }).toList(),
+              ),
+            ),
+
+            // Payment Method selector
+            Padding(
+              padding: const EdgeInsets.only(left: 16, top: 12, bottom: 4),
+              child: const Text(
+                'Payment Method',
+                style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold),
+              ),
+            ),
+            Container(
+              height: 44,
+              margin: const EdgeInsets.only(top: 4),
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                children: PaymentConstants.all.map((p) {
+                  final isSel = p.id == _selectedPaymentMethod;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: FilterChip(
+                      selected: isSel,
+                      showCheckmark: false,
+                      avatar: Icon(
+                        p.icon,
+                        size: 16,
+                        color: isSel ? Colors.white : p.color,
+                      ),
+                      label: Text(
+                        p.label,
+                        style: TextStyle(
+                          color: isSel ? Colors.white : Colors.white70,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      backgroundColor: const Color(0xFF24242C),
+                      selectedColor: const Color(0xFF7C6FF7),
+                      onSelected: (_) => setState(() => _selectedPaymentMethod = p.id),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                        side: BorderSide(
+                          color: isSel ? const Color(0xFF7C6FF7) : Colors.transparent,
+                          width: 1.5,
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+
+            // Tags Section
+            Padding(
+              padding: const EdgeInsets.only(left: 16, top: 12, bottom: 4),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Tags',
+                    style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold),
+                  ),
+                  TextButton.icon(
+                    style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                    onPressed: _showAddTagDialog,
+                    icon: const Icon(Icons.add, size: 16, color: Color(0xFFF2994A)),
+                    label: const Text('Add Tag', style: TextStyle(color: Color(0xFFF2994A), fontSize: 12, fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                children: [
+                  ..._tags.map((tag) => Chip(
+                        backgroundColor: const Color(0xFFF2994A).withValues(alpha: 0.2),
+                        side: const BorderSide(color: Color(0xFFF2994A)),
+                        label: Text('#$tag', style: const TextStyle(color: Color(0xFFF2994A), fontSize: 12, fontWeight: FontWeight.w600)),
+                        deleteIcon: const Icon(Icons.close, size: 14, color: Color(0xFFF2994A)),
+                        onDeleted: () => setState(() => _tags.remove(tag)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      )),
+                  ...['online', 'swiggy', 'trip', 'fuel', 'groceries']
+                      .where((suggested) => !_tags.contains(suggested))
+                      .map((suggested) => ActionChip(
+                            backgroundColor: const Color(0xFF24242C),
+                            side: BorderSide.none,
+                            label: Text('+$suggested', style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                            onPressed: () => setState(() => _tags.add(suggested)),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          )),
+                ],
               ),
             ),
 

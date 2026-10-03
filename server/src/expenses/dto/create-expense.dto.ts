@@ -57,6 +57,19 @@ export class CreateExpenseDto {
   category?: string;
 
   @IsOptional()
+  @IsString()
+  type?: string;
+
+  @IsOptional()
+  @IsString()
+  paymentMethod?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  tags?: string[];
+
+  @IsOptional()
   @IsDateString()
   date?: string;
 

@@ -35,11 +35,11 @@ export class GroupsService {
     });
   }
 
-  async findAll(userId: string) {
+  async findAll(userId: string, archived = false) {
     return this.prisma.group.findMany({
       where: {
         members: { some: { userId, leftAt: null } },
-        archivedAt: null,
+        archivedAt: archived ? { not: null } : null,
       },
       include: {
         members: {
@@ -213,9 +213,17 @@ export class GroupsService {
 
   async archive(userId: string, id: string) {
     await this.assertAdmin(userId, id);
-    await this.prisma.group.update({
+    return this.prisma.group.update({
       where: { id },
       data: { archivedAt: new Date() },
+    });
+  }
+
+  async unarchive(userId: string, id: string) {
+    await this.assertAdmin(userId, id);
+    return this.prisma.group.update({
+      where: { id },
+      data: { archivedAt: null },
     });
   }
 

@@ -29,6 +29,18 @@ class SettlementsApi {
     return response.data as Map<String, dynamic>;
   }
 
+  Future<void> delete(String id) async {
+    await _client.dio.delete('/settlements/$id');
+  }
+
+  Future<Map<String, dynamic>> dispute(String id, bool isDisputed, [String? reason]) async {
+    final response = await _client.dio.patch('/settlements/$id/dispute', data: {
+      'isDisputed': isDisputed,
+      'disputeReason': ?reason,
+    });
+    return response.data as Map<String, dynamic>;
+  }
+
   Future<Map<String, dynamic>> getUpiLink({
     required String vpa,
     required int amount,

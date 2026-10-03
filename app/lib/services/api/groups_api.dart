@@ -10,8 +10,10 @@ class GroupsApi {
     return response.data as Map<String, dynamic>;
   }
 
-  Future<List<dynamic>> list() async {
-    final response = await _client.dio.get('/groups');
+  Future<List<dynamic>> list({bool archived = false}) async {
+    final response = await _client.dio.get('/groups', queryParameters: {
+      'archived': archived ? 'true' : 'false',
+    });
     return response.data as List<dynamic>;
   }
 
@@ -26,7 +28,11 @@ class GroupsApi {
   }
 
   Future<void> archive(String id) async {
-    await _client.dio.delete('/groups/$id');
+    await _client.dio.patch('/groups/$id/archive');
+  }
+
+  Future<void> unarchive(String id) async {
+    await _client.dio.patch('/groups/$id/unarchive');
   }
 
   Future<List<dynamic>> getBalances(String id) async {

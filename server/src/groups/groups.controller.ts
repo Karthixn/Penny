@@ -9,6 +9,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -29,8 +30,8 @@ export class GroupsController {
   }
 
   @Get()
-  findAll(@Req() req: any) {
-    return this.groups.findAll(req.user.userId);
+  findAll(@Req() req: any, @Query('archived') archived?: string) {
+    return this.groups.findAll(req.user.userId, archived === 'true');
   }
 
   @Get(':id')
@@ -45,6 +46,16 @@ export class GroupsController {
     @Body() dto: UpdateGroupDto,
   ) {
     return this.groups.update(req.user.userId, id, dto);
+  }
+
+  @Patch(':id/archive')
+  archiveGroup(@Req() req: any, @Param('id', ParseUUIDPipe) id: string) {
+    return this.groups.archive(req.user.userId, id);
+  }
+
+  @Patch(':id/unarchive')
+  unarchiveGroup(@Req() req: any, @Param('id', ParseUUIDPipe) id: string) {
+    return this.groups.unarchive(req.user.userId, id);
   }
 
   @Delete(':id')

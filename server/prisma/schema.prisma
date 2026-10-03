@@ -131,14 +131,19 @@ model Expense {
   id          String    @id @default(uuid()) @db.Uuid
   groupId     String?   @map("group_id") @db.Uuid
   description String
-  totalAmount Int       @map("total_amount") // paise
-  category    String    @default("other")
-  date        DateTime  @default(now())
-  createdBy   String    @map("created_by") @db.Uuid
-  clientId    String?   @unique @map("client_id") @db.Uuid
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
-  deletedAt   DateTime? @map("deleted_at")
+  totalAmount   Int       @map("total_amount") // paise
+  category      String    @default("other")
+  type          String    @default("expense") // "expense" | "income"
+  paymentMethod String?   @map("payment_method") // "upi" | "credit_card" | "debit_card" | "cash" | "fastag" | "net_banking" | "other"
+  tags          String[]  @default([])
+  isDisputed    Boolean   @default(false) @map("is_disputed")
+  disputeReason String?   @map("dispute_reason")
+  date          DateTime  @default(now())
+  createdBy     String    @map("created_by") @db.Uuid
+  clientId      String?   @unique @map("client_id") @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  deletedAt     DateTime? @map("deleted_at")
 
   group   Group?         @relation(fields: [groupId], references: [id])
   creator User           @relation(fields: [createdBy], references: [id])
@@ -205,9 +210,12 @@ model Settlement {
   groupId   String    @map("group_id") @db.Uuid
   payerId   String    @map("payer_id") @db.Uuid
   payeeId   String    @map("payee_id") @db.Uuid
-  amount    Int       // paise
-  settledAt DateTime? @map("settled_at")
-  createdAt DateTime  @default(now()) @map("created_at")
+  amount        Int       // paise
+  note          String?
+  isDisputed    Boolean   @default(false) @map("is_disputed")
+  disputeReason String?   @map("dispute_reason")
+  settledAt     DateTime? @map("settled_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
 
   group Group @relation(fields: [groupId], references: [id])
   payer User  @relation("SettlementPayer", fields: [payerId], references: [id])

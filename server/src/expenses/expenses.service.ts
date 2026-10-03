@@ -52,6 +52,9 @@ export class ExpensesService {
           description: dto.description,
           totalAmount: dto.totalAmount,
           category: dto.category ?? 'other',
+          type: dto.type ?? 'expense',
+          paymentMethod: dto.paymentMethod ?? null,
+          tags: dto.tags ?? [],
           date: dto.date ? new Date(dto.date) : new Date(),
           createdBy: userId,
           groupId: dto.groupId ?? null,
@@ -238,6 +241,11 @@ export class ExpensesService {
           ...(dto.totalAmount && { totalAmount: dto.totalAmount }),
           ...(dto.category && { category: dto.category }),
           ...(dto.date && { date: new Date(dto.date) }),
+          ...(dto.type && { type: dto.type }),
+          ...(dto.paymentMethod !== undefined && { paymentMethod: dto.paymentMethod }),
+          ...(dto.tags !== undefined && { tags: dto.tags }),
+          ...(dto.isDisputed !== undefined && { isDisputed: dto.isDisputed }),
+          ...(dto.disputeReason !== undefined && { disputeReason: dto.disputeReason }),
         },
         include: {
           payers: { include: { user: { select: { id: true, displayName: true, email: true } } } },
@@ -245,6 +253,34 @@ export class ExpensesService {
           creator: { select: { id: true, displayName: true, email: true } },
         },
       });
+    });
+  }
+
+  async dispute(userId: string, id: string, dto: { isDisputed: boolean; disputeReason?: string }) {
+    const expense = await this.prisma.expense.findFirst({
+      where: { id, deletedAt: null },
+    });
+    if (!expense) throw new NotFoundException('Expense not found');
+    if (expense.groupId) {
+      const isMember = await this.prisma.groupMember.findFirst({
+        where: { groupId: expense.groupId, userId, leftAt: null },
+      });
+      if (!isMember) throw new ForbiddenException();
+    } else {
+      if (expense.createdBy !== userId) throw new ForbiddenException();
+    }
+
+    return this.prisma.expense.update({
+      where: { id },
+      data: {
+        isDisputed: dto.isDisputed,
+        disputeReason: dto.disputeReason ?? null,
+      },
+      include: {
+        payers: { include: { user: { select: { id: true, displayName: true, email: true } } } },
+        splits: { include: { user: { select: { id: true, displayName: true, email: true } } } },
+        creator: { select: { id: true, displayName: true, email: true } },
+      },
     });
   }
 
@@ -285,7 +321,10 @@ export class ExpensesService {
     });
 
     let totalSpent = 0;
+    let totalIncome = 0;
     const byCategory: Record<string, number> = {};
+    const byPaymentMethod: Record<string, number> = {};
+    const byTags: Record<string, number> = {};
 
     for (const exp of expenses) {
       let userAmount: number;
@@ -295,10 +334,31 @@ export class ExpensesService {
       } else {
         userAmount = exp.totalAmount;
       }
-      totalSpent += userAmount;
-      byCategory[exp.category] = (byCategory[exp.category] ?? 0) + userAmount;
+
+      if (exp.type === 'income') {
+        totalIncome += userAmount;
+      } else {
+        totalSpent += userAmount;
+        byCategory[exp.category] = (byCategory[exp.category] ?? 0) + userAmount;
+        if (exp.paymentMethod) {
+          byPaymentMethod[exp.paymentMethod] = (byPaymentMethod[exp.paymentMethod] ?? 0) + userAmount;
+        }
+        if (exp.tags?.length) {
+          for (const t of exp.tags) {
+            byTags[t] = (byTags[t] ?? 0) + userAmount;
+          }
+        }
+      }
     }
 
-    return { totalSpent, byCategory, expenseCount: expenses.length };
+    return {
+      totalSpent,
+      totalIncome,
+      netSavings: totalIncome - totalSpent,
+      byCategory,
+      byPaymentMethod,
+      byTags,
+      expenseCount: expenses.length,
+    };
   }
 }

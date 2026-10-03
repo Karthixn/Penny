@@ -20,6 +20,11 @@ class GroupsScreen extends ConsumerWidget {
         ),
         actions: [
           IconButton(
+            tooltip: 'Archived Groups',
+            icon: const Icon(Icons.archive_outlined),
+            onPressed: () => _showArchivedGroups(context, ref),
+          ),
+          IconButton(
             tooltip: 'Join with Code',
             icon: const Icon(Icons.group_add_outlined),
             onPressed: () => _showJoinDialog(context, ref),
@@ -410,5 +415,108 @@ class GroupsScreen extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  void _showArchivedGroups(BuildContext context, WidgetRef ref) async {
+    try {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(child: CircularProgressIndicator(color: AppColors.primary)),
+      );
+
+      final list = await ref.read(groupsApiProvider).list(archived: true);
+      if (context.mounted) Navigator.of(context, rootNavigator: true).pop();
+
+      final archivedGroups = list.cast<Map<String, dynamic>>();
+
+      if (!context.mounted) return;
+      showModalBottomSheet(
+        context: context,
+        backgroundColor: const Color(0xFF1E1E24),
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        builder: (ctx) => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Archived Groups',
+                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    '${archivedGroups.length}',
+                    style: const TextStyle(color: Colors.white54, fontSize: 14),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              if (archivedGroups.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24),
+                  child: Center(
+                    child: Text('No archived groups', style: TextStyle(color: Colors.white38)),
+                  ),
+                )
+              else
+                Flexible(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: archivedGroups.length,
+                    separatorBuilder: (_, _) => const Divider(color: Colors.white12, height: 1),
+                    itemBuilder: (_, idx) {
+                      final g = archivedGroups[idx];
+                      final gid = (g['id'] ?? '') as String;
+                      final name = (g['name'] ?? 'Group') as String;
+                      final emoji = (g['emoji'] ?? '👥') as String;
+
+                      return ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: const Color(0xFF282830),
+                          child: Text(emoji, style: const TextStyle(fontSize: 18)),
+                        ),
+                        title: Text(name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                        trailing: TextButton.icon(
+                          icon: const Icon(Icons.unarchive_outlined, size: 16, color: Color(0xFFF2994A)),
+                          label: const Text('Restore', style: TextStyle(color: Color(0xFFF2994A), fontSize: 13, fontWeight: FontWeight.bold)),
+                          onPressed: () async {
+                            Navigator.pop(ctx);
+                            await ref.read(groupsApiProvider).unarchive(gid);
+                            ref.read(groupListProvider.notifier).loadGroups();
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Restored "$name" to active groups!')),
+                              );
+                            }
+                          },
+                        ),
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          context.push('/groups/$gid');
+                        },
+                      );
+                    },
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+    } catch (e) {
+      if (context.mounted) {
+        try {
+          Navigator.of(context, rootNavigator: true).pop();
+        } catch (_) {}
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load archived groups: $e'), backgroundColor: AppColors.red),
+        );
+      }
+    }
   }
 }

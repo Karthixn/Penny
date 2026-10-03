@@ -40,6 +40,14 @@ class ExpensesApi {
     await _client.dio.delete('/expenses/$id');
   }
 
+  Future<Map<String, dynamic>> dispute(String id, bool isDisputed, [String? reason]) async {
+    final response = await _client.dio.patch('/expenses/$id/dispute', data: {
+      'isDisputed': isDisputed,
+      'disputeReason': ?reason,
+    });
+    return response.data as Map<String, dynamic>;
+  }
+
   Future<Map<String, dynamic>> getStats(int year, int month) async {
     final response = await _client.dio.get('/expenses/stats', queryParameters: {
       'year': year,

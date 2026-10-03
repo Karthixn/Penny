@@ -367,6 +367,28 @@ class _ExpenseDetailScreenState extends ConsumerState<ExpenseDetailScreen> {
             title: const Text('Expense detail', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
             actions: [
               IconButton(
+                icon: Icon(
+                  expense['isDisputed'] == true ? Icons.flag : Icons.flag_outlined,
+                  color: expense['isDisputed'] == true ? const Color(0xFFF59E0B) : Colors.white70,
+                ),
+                tooltip: expense['isDisputed'] == true ? 'Clear Dispute' : 'Flag / Dispute Expense',
+                onPressed: () async {
+                  final currentlyDisputed = expense['isDisputed'] == true;
+                  await ref.read(expensesApiProvider).dispute(
+                        widget.expenseId,
+                        !currentlyDisputed,
+                        'Flagged from details',
+                      );
+                  ref.invalidate(_expenseDetailProvider(widget.expenseId));
+                  if (groupId != null) ref.invalidate(groupDetailProvider(groupId));
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(currentlyDisputed ? 'Dispute cleared' : 'Expense marked as disputed')),
+                    );
+                  }
+                },
+              ),
+              IconButton(
                 icon: const Icon(Icons.delete_outline, color: Colors.white70),
                 tooltip: 'Delete',
                 onPressed: () => _deleteExpense(groupId),
@@ -393,6 +415,31 @@ class _ExpenseDetailScreenState extends ConsumerState<ExpenseDetailScreen> {
           body: ListView(
             padding: const EdgeInsets.all(16),
             children: [
+              // Dispute Warning Banner
+              if (expense['isDisputed'] == true) ...[
+                Container(
+                  margin: const EdgeInsets.only(bottom: 16),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFF59E0B)),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.warning_amber_rounded, color: Color(0xFFF59E0B)),
+                      SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'This expense is disputed and marked under review.',
+                          style: TextStyle(color: Color(0xFFF59E0B), fontWeight: FontWeight.w600, fontSize: 13),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
               // Title & Category Badge
               Container(
                 padding: const EdgeInsets.all(16),
@@ -400,31 +447,63 @@ class _ExpenseDetailScreenState extends ConsumerState<ExpenseDetailScreen> {
                   color: const Color(0xFF24242C),
                   borderRadius: BorderRadius.circular(14),
                 ),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    CircleAvatar(
-                      radius: 22,
-                      backgroundColor: CategoryConstants.getColor(category).withValues(alpha: 0.15),
-                      child: Icon(
-                        CategoryConstants.getIcon(category),
-                        color: CategoryConstants.getColor(category),
-                      ),
+                    Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 22,
+                          backgroundColor: CategoryConstants.getColor(category).withValues(alpha: 0.15),
+                          child: Icon(
+                            CategoryConstants.getIcon(category),
+                            color: CategoryConstants.getColor(category),
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(description, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 2),
+                              Text(CategoryConstants.getLabel(category), style: const TextStyle(color: Colors.white54, fontSize: 13)),
+                            ],
+                          ),
+                        ),
+                        Text(
+                          _fmt(_totalAmountPaise),
+                          style: const TextStyle(color: Color(0xFFF2994A), fontSize: 20, fontWeight: FontWeight.bold),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                    if (expense['paymentMethod'] != null || (expense['tags'] is List && (expense['tags'] as List).isNotEmpty)) ...[
+                      const SizedBox(height: 12),
+                      const Divider(color: Colors.white12, height: 1),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
                         children: [
-                          Text(description, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 2),
-                          Text(CategoryConstants.getLabel(category), style: const TextStyle(color: Colors.white54, fontSize: 13)),
+                          if (expense['paymentMethod'] != null)
+                            Chip(
+                              backgroundColor: const Color(0xFF1E1E24),
+                              side: const BorderSide(color: Colors.white24),
+                              avatar: const Icon(Icons.payment, size: 14, color: Colors.white70),
+                              label: Text(
+                                (expense['paymentMethod'] as String).toUpperCase(),
+                                style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                          if (expense['tags'] is List)
+                            ...((expense['tags'] as List).map((t) => Chip(
+                                  backgroundColor: const Color(0xFFF2994A).withValues(alpha: 0.15),
+                                  side: const BorderSide(color: Color(0xFFF2994A)),
+                                  label: Text('#$t', style: const TextStyle(color: Color(0xFFF2994A), fontSize: 11, fontWeight: FontWeight.bold)),
+                                ))),
                         ],
                       ),
-                    ),
-                    Text(
-                      _fmt(_totalAmountPaise),
-                      style: const TextStyle(color: Color(0xFFF2994A), fontSize: 20, fontWeight: FontWeight.bold),
-                    ),
+                    ],
                   ],
                 ),
               ),

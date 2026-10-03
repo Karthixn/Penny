@@ -1,4 +1,4 @@
-import { IsUUID, IsInt, Min } from 'class-validator';
+import { IsUUID, IsInt, Min, IsOptional, IsString } from 'class-validator';
 
 export class CreateSettlementDto {
   @IsUUID()
@@ -10,4 +10,8 @@ export class CreateSettlementDto {
   @IsInt()
   @Min(1)
   amount!: number;
+
+  @IsOptional()
+  @IsString()
+  note?: string;
 }

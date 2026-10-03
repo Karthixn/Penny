@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
@@ -32,6 +33,20 @@ export class SettlementsController {
   @Post()
   create(@Req() req: any, @Body() dto: CreateSettlementDto) {
     return this.settlements.create(req.user.userId, dto);
+  }
+
+  @Delete(':id')
+  remove(@Req() req: any, @Param('id', ParseUUIDPipe) id: string) {
+    return this.settlements.remove(req.user.userId, id);
+  }
+
+  @Patch(':id/dispute')
+  dispute(
+    @Req() req: any,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { isDisputed: boolean; disputeReason?: string },
+  ) {
+    return this.settlements.dispute(req.user.userId, id, body);
   }
 
   @Patch(':id/settle')

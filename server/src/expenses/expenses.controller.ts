@@ -69,6 +69,15 @@ export class ExpensesController {
     return this.expenses.update(req.user.userId, id, dto);
   }
 
+  @Patch(':id/dispute')
+  dispute(
+    @Req() req: any,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { isDisputed: boolean; disputeReason?: string },
+  ) {
+    return this.expenses.dispute(req.user.userId, id, body);
+  }
+
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   remove(@Req() req: any, @Param('id', ParseUUIDPipe) id: string) {

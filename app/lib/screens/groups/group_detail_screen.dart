@@ -188,47 +188,103 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> with Sing
               PopupMenuButton<String>(
                 icon: const Icon(Icons.more_vert_rounded, color: Colors.white),
                 color: const Color(0xFF242736),
-                onSelected: (value) {
+                onSelected: (value) async {
                   if (value == 'invite') {
                     _showInviteDialog();
                   } else if (value == 'settle') {
                     context.push('/settle/${widget.groupId}');
+                  } else if (value == 'archive') {
+                    final confirm = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        backgroundColor: const Color(0xFF1E1E24),
+                        title: const Text('Archive Group?', style: TextStyle(color: Colors.white)),
+                        content: const Text(
+                          'Archived groups are hidden from your active list, but all expenses and history remain preserved.',
+                          style: TextStyle(color: Colors.white70),
+                        ),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel', style: TextStyle(color: Colors.white54))),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFF2994A)),
+                            onPressed: () => Navigator.pop(ctx, true),
+                            child: const Text('Archive', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (confirm == true) {
+                      await ref.read(groupsApiProvider).archive(widget.groupId);
+                      ref.invalidate(groupListProvider);
+                      _refreshAll();
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Group archived')),
+                        );
+                      }
+                    }
+                  } else if (value == 'unarchive') {
+                    await ref.read(groupsApiProvider).unarchive(widget.groupId);
+                    ref.invalidate(groupListProvider);
+                    _refreshAll();
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Group unarchived')),
+                      );
+                    }
                   } else if (value == 'refresh') {
                     _refreshAll();
                   }
                 },
-                itemBuilder: (ctx) => [
-                  const PopupMenuItem(
-                    value: 'invite',
-                    child: Row(
-                      children: [
-                        Icon(Icons.qr_code_rounded, color: Color(0xFFF2994A), size: 18),
-                        SizedBox(width: 8),
-                        Text('Invite Code', style: TextStyle(color: Colors.white)),
-                      ],
+                itemBuilder: (ctx) {
+                  final isArchived = group?['isArchived'] == true;
+                  return [
+                    const PopupMenuItem(
+                      value: 'invite',
+                      child: Row(
+                        children: [
+                          Icon(Icons.qr_code_rounded, color: Color(0xFFF2994A), size: 18),
+                          SizedBox(width: 8),
+                          Text('Invite Code', style: TextStyle(color: Colors.white)),
+                        ],
+                      ),
                     ),
-                  ),
-                  const PopupMenuItem(
-                    value: 'settle',
-                    child: Row(
-                      children: [
-                        Icon(Icons.payments_outlined, color: Colors.greenAccent, size: 18),
-                        SizedBox(width: 8),
-                        Text('Settle Up', style: TextStyle(color: Colors.white)),
-                      ],
+                    const PopupMenuItem(
+                      value: 'settle',
+                      child: Row(
+                        children: [
+                          Icon(Icons.payments_outlined, color: Colors.greenAccent, size: 18),
+                          SizedBox(width: 8),
+                          Text('Settle Up', style: TextStyle(color: Colors.white)),
+                        ],
+                      ),
                     ),
-                  ),
-                  const PopupMenuItem(
-                    value: 'refresh',
-                    child: Row(
-                      children: [
-                        Icon(Icons.refresh_rounded, color: Colors.white70, size: 18),
-                        SizedBox(width: 8),
-                        Text('Refresh Data', style: TextStyle(color: Colors.white)),
-                      ],
+                    PopupMenuItem(
+                      value: isArchived ? 'unarchive' : 'archive',
+                      child: Row(
+                        children: [
+                          Icon(
+                            isArchived ? Icons.unarchive_outlined : Icons.archive_outlined,
+                            color: Colors.amberAccent,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(isArchived ? 'Unarchive Group' : 'Archive Group', style: const TextStyle(color: Colors.white)),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                    const PopupMenuItem(
+                      value: 'refresh',
+                      child: Row(
+                        children: [
+                          Icon(Icons.refresh_rounded, color: Colors.white70, size: 18),
+                          SizedBox(width: 8),
+                          Text('Refresh Data', style: TextStyle(color: Colors.white)),
+                        ],
+                      ),
+                    ),
+                  ];
+                },
               ),
             ],
             bottom: PreferredSize(
@@ -523,9 +579,9 @@ class _OverviewTab extends ConsumerWidget {
                 children: [
                   ...displayed.map((item) {
                     if (item.isExpense) {
-                      return _buildExpenseCard(context, item.raw);
+                      return _buildExpenseCard(context, ref, item.raw);
                     } else {
-                      return _buildSettlementCard(context, item.raw);
+                      return _buildSettlementCard(context, ref, item.raw);
                     }
                   }),
                   if (activityItems.length > 3)
@@ -719,7 +775,7 @@ class _OverviewTab extends ConsumerWidget {
 );
   }
 
-  Widget _buildExpenseCard(BuildContext context, Map<String, dynamic> exp) {
+  Widget _buildExpenseCard(BuildContext context, WidgetRef ref, Map<String, dynamic> exp) {
     final creator = exp['creator'] as Map<String, dynamic>?;
     final payers = (exp['payers'] as List?)?.cast<Map<String, dynamic>>() ?? [];
     final splits = (exp['splits'] as List?)?.cast<Map<String, dynamic>>() ?? [];
@@ -734,6 +790,8 @@ class _OverviewTab extends ConsumerWidget {
 
     final totalAmount = (exp['totalAmount'] as num?)?.toInt() ?? 0;
     final dateStr = _formatActivityDate(exp['date'] ?? exp['createdAt']);
+    final isDisputed = exp['isDisputed'] == true;
+    final expenseId = (exp['id'] ?? '') as String;
 
     final category = (exp['category'] as String?) ?? 'other';
     final catMeta = CategoryConstants.get(category);
@@ -803,6 +861,25 @@ class _OverviewTab extends ConsumerWidget {
                           ],
                         ),
                       ),
+                      if (isDisputed) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF59E0B).withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: const Color(0xFFF59E0B), width: 1),
+                          ),
+                          child: const Text(
+                            'DISPUTED',
+                            style: TextStyle(
+                              color: Color(0xFFF59E0B),
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                   const SizedBox(height: 3),
@@ -820,13 +897,65 @@ class _OverviewTab extends ConsumerWidget {
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text(
-                  _fmt(totalAmount),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _fmt(totalAmount),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    PopupMenuButton<String>(
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      icon: const Icon(Icons.more_vert, color: Colors.white38, size: 18),
+                      color: const Color(0xFF242736),
+                      onSelected: (action) async {
+                        if (action == 'view' && expenseId.isNotEmpty) {
+                          context.push('/expenses/$expenseId');
+                        } else if (action == 'dispute' && expenseId.isNotEmpty) {
+                          await ref.read(expensesApiProvider).dispute(
+                                expenseId,
+                                !isDisputed,
+                                'Flagged by group member',
+                              );
+                          onRefresh();
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(isDisputed ? 'Dispute resolved' : 'Expense marked as disputed'),
+                              ),
+                            );
+                          }
+                        }
+                      },
+                      itemBuilder: (ctx) => [
+                        const PopupMenuItem(
+                          value: 'view',
+                          child: Row(
+                            children: [
+                              Icon(Icons.visibility_outlined, color: Colors.white70, size: 16),
+                              SizedBox(width: 8),
+                              Text('View Details', style: TextStyle(color: Colors.white, fontSize: 13)),
+                            ],
+                          ),
+                        ),
+                        PopupMenuItem(
+                          value: 'dispute',
+                          child: Row(
+                            children: [
+                              Icon(Icons.flag_outlined, color: isDisputed ? Colors.white70 : const Color(0xFFF59E0B), size: 16),
+                              const SizedBox(width: 8),
+                              Text(isDisputed ? 'Clear Dispute' : 'Dispute Expense', style: const TextStyle(color: Colors.white, fontSize: 13)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 6),
                 _buildParticipantChips(splits),
@@ -838,13 +967,16 @@ class _OverviewTab extends ConsumerWidget {
     );
   }
 
-  Widget _buildSettlementCard(BuildContext context, Map<String, dynamic> st) {
+  Widget _buildSettlementCard(BuildContext context, WidgetRef ref, Map<String, dynamic> st) {
     final payer = st['payer'] as Map<String, dynamic>?;
     final payee = st['payee'] as Map<String, dynamic>?;
     final payerName = payer?['displayName'] ?? 'Someone';
     final payeeName = payee?['displayName'] ?? 'Someone';
     final amount = (st['amount'] as num?)?.toInt() ?? 0;
     final dateStr = _formatActivityDate(st['settledAt'] ?? st['createdAt']);
+    final isDisputed = st['isDisputed'] == true;
+    final note = st['note'] as String?;
+    final settlementId = (st['id'] ?? '') as String;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -866,13 +998,36 @@ class _OverviewTab extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Debt settlement',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                  ),
+                Row(
+                  children: [
+                    const Text(
+                      'Debt settlement',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    if (isDisputed) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF59E0B).withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: const Color(0xFFF59E0B), width: 1),
+                        ),
+                        child: const Text(
+                          'DISPUTED',
+                          style: TextStyle(
+                            color: Color(0xFFF59E0B),
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
                 const SizedBox(height: 3),
                 Text(
@@ -880,9 +1035,16 @@ class _OverviewTab extends ConsumerWidget {
                   style: const TextStyle(color: Colors.white38, fontSize: 12),
                 ),
                 Text(
-                  'From $payerName to',
+                  'From $payerName to $payeeName',
                   style: const TextStyle(color: Colors.white60, fontSize: 12),
                 ),
+                if (note != null && note.isNotEmpty) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    'Note: $note',
+                    style: const TextStyle(color: Color(0xFFF2994A), fontSize: 11, fontStyle: FontStyle.italic),
+                  ),
+                ],
               ],
             ),
           ),
@@ -897,14 +1059,89 @@ class _OverviewTab extends ConsumerWidget {
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              const SizedBox(height: 6),
-              CircleAvatar(
-                radius: 11,
-                backgroundColor: _getAvatarColor(payeeName),
-                child: Text(
-                  _getInitials(payeeName),
-                  style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                ),
+              const SizedBox(height: 4),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircleAvatar(
+                    radius: 11,
+                    backgroundColor: _getAvatarColor(payeeName),
+                    child: Text(
+                      _getInitials(payeeName),
+                      style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  PopupMenuButton<String>(
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    icon: const Icon(Icons.more_vert, color: Colors.white38, size: 18),
+                    color: const Color(0xFF242736),
+                    onSelected: (action) async {
+                      if (action == 'undo') {
+                        final confirm = await showDialog<bool>(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            backgroundColor: const Color(0xFF1E1E24),
+                            title: const Text('Undo Settlement?', style: TextStyle(color: Colors.white)),
+                            content: const Text(
+                              'This will delete the settlement and restore the original debt balances.',
+                              style: TextStyle(color: Colors.white70),
+                            ),
+                            actions: [
+                              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel', style: TextStyle(color: Colors.white54))),
+                              ElevatedButton(
+                                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFEF4444)),
+                                onPressed: () => Navigator.pop(ctx, true),
+                                child: const Text('Undo Settlement', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (confirm == true && settlementId.isNotEmpty) {
+                          await ref.read(settlementsApiProvider).delete(settlementId);
+                          onRefresh();
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Settlement undone!')),
+                            );
+                          }
+                        }
+                      } else if (action == 'dispute') {
+                        if (settlementId.isNotEmpty) {
+                          await ref.read(settlementsApiProvider).dispute(settlementId, !isDisputed, 'Flagged by member');
+                          onRefresh();
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(isDisputed ? 'Dispute cleared' : 'Settlement marked as disputed')),
+                            );
+                          }
+                        }
+                      }
+                    },
+                    itemBuilder: (ctx) => [
+                      PopupMenuItem(
+                        value: 'dispute',
+                        child: Row(
+                          children: [
+                            Icon(Icons.flag_outlined, color: isDisputed ? Colors.white70 : const Color(0xFFF59E0B), size: 16),
+                            const SizedBox(width: 8),
+                            Text(isDisputed ? 'Clear Dispute' : 'Dispute Payment', style: const TextStyle(color: Colors.white, fontSize: 13)),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'undo',
+                        child: Row(
+                          children: [
+                            Icon(Icons.undo, color: Color(0xFFEF4444), size: 16),
+                            SizedBox(width: 8),
+                            Text('Undo Settlement', style: TextStyle(color: Color(0xFFEF4444), fontSize: 13)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ],
           ),
@@ -1180,11 +1417,36 @@ class _ExpensesTab extends ConsumerWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              exp['description'] as String? ?? 'Expense',
-                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 15),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    exp['description'] as String? ?? 'Expense',
+                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 15),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                if (exp['isDisputed'] == true) ...[
+                                  const SizedBox(width: 6),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFF59E0B).withValues(alpha: 0.2),
+                                      borderRadius: BorderRadius.circular(4),
+                                      border: Border.all(color: const Color(0xFFF59E0B), width: 1),
+                                    ),
+                                    child: const Text(
+                                      'DISPUTED',
+                                      style: TextStyle(
+                                        color: Color(0xFFF59E0B),
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
                             ),
                             const SizedBox(height: 3),
                             Text(
