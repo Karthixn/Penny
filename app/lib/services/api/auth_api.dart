@@ -19,7 +19,14 @@ class AuthApi {
       payload['displayName'] = displayName;
     }
     final response = await _client.dio.post('/auth/register', data: payload);
-    return response.data as Map<String, dynamic>;
+    final data = response.data as Map<String, dynamic>;
+    if (data['accessToken'] != null) {
+      await SecureStorage.saveTokens(
+        accessToken: data['accessToken'] as String,
+        refreshToken: data['refreshToken'] as String,
+      );
+    }
+    return data;
   }
 
   Future<Map<String, dynamic>> login({

@@ -3,8 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../main.dart';
 import '../services/api/api_client.dart';
 import '../services/api/auth_api.dart';
+import '../services/storage/secure_storage.dart';
 
-final apiClientProvider = Provider((ref) => ApiClient());
+final apiClientProvider = Provider((ref) {
+  final client = ApiClient();
+  client.onUnauthenticated = () {
+    ref.read(authProvider.notifier).forceLogout();
+  };
+  return client;
+});
 final authApiProvider = Provider((ref) => AuthApi(ref.read(apiClientProvider)));
 
 enum AuthStatus { initial, authenticated, unauthenticated, awaitingVerification, loading }
@@ -133,6 +140,11 @@ class AuthNotifier extends Notifier<AuthState> {
 
   Future<void> logout() async {
     await ref.read(authApiProvider).logout();
+    state = const AuthState(status: AuthStatus.unauthenticated);
+  }
+
+  void forceLogout() {
+    SecureStorage.clearTokens();
     state = const AuthState(status: AuthStatus.unauthenticated);
   }
 

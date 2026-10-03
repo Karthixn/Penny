@@ -211,12 +211,23 @@ export class AuthService {
     });
 
     if (!stored || stored.isRevoked || stored.expiresAt < new Date()) {
-      if (stored) {
-        // Potential theft: revoke entire family
-        await this.prisma.refreshToken.updateMany({
-          where: { family: stored.family },
-          data: { isRevoked: true },
+      if (stored && stored.isRevoked) {
+        // If a new valid token was recently generated for this family within 30 seconds,
+        // it was a concurrent request from the same client, NOT a token theft.
+        const recentInFamily = await this.prisma.refreshToken.findFirst({
+          where: {
+            family: stored.family,
+            createdAt: { gt: new Date(Date.now() - 30 * 1000) },
+            isRevoked: false,
+          },
         });
+        if (!recentInFamily) {
+          // Potential theft: revoke entire family
+          await this.prisma.refreshToken.updateMany({
+            where: { family: stored.family },
+            data: { isRevoked: true },
+          });
+        }
       }
       throw new UnauthorizedException('Invalid refresh token');
     }
@@ -288,7 +299,7 @@ export class AuthService {
     const tokenFamily = family || uuidv4();
     const accessToken = this.jwt.sign(
       { sub: userId },
-      { expiresIn: this.config.get('JWT_EXPIRES_IN', '15m') },
+      { expiresIn: this.config.get('JWT_EXPIRES_IN', '7d') },
     );
 
     const rawRefresh = uuidv4();
@@ -307,7 +318,7 @@ export class AuthService {
     return {
       accessToken,
       refreshToken: rawRefresh,
-      expiresIn: 900, // 15 min in seconds
+      expiresIn: 604800, // 7 days in seconds
     };
   }
 

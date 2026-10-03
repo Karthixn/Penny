@@ -321,9 +321,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       children: [
                         const Icon(Icons.error_outline, color: AppColors.red, size: 48),
                         const SizedBox(height: 12),
-                        const Text(
-                          'Failed to load profile',
-                          style: TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.w600),
+                        Text(
+                          userState.isAuthError ? 'Session Expired' : 'Failed to load profile',
+                          style: const TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.w600),
                         ),
                         const SizedBox(height: 6),
                         Text(
@@ -332,11 +332,31 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
                         ),
                         const SizedBox(height: 20),
-                        ElevatedButton.icon(
-                          onPressed: () => ref.read(userProvider.notifier).loadProfile(),
-                          icon: const Icon(Icons.refresh),
-                          label: const Text('Retry'),
-                        ),
+                        if (userState.isAuthError) ...[
+                          ElevatedButton.icon(
+                            onPressed: () async {
+                              ref.invalidate(userProvider);
+                              await ref.read(authProvider.notifier).logout();
+                              if (context.mounted) context.go('/login');
+                            },
+                            icon: const Icon(Icons.login),
+                            label: const Text('Sign In Again'),
+                            style: ElevatedButton.styleFrom(
+                              minimumSize: const Size(200, 48),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          TextButton(
+                            onPressed: () => ref.read(userProvider.notifier).loadProfile(),
+                            child: const Text('Retry', style: TextStyle(color: AppColors.textSecondary)),
+                          ),
+                        ] else ...[
+                          ElevatedButton.icon(
+                            onPressed: () => ref.read(userProvider.notifier).loadProfile(),
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('Retry'),
+                          ),
+                        ],
                       ],
                     ),
                   ),

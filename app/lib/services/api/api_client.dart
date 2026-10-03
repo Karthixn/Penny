@@ -1,9 +1,13 @@
+import 'dart:async';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import '../../core/constants/api_constants.dart';
 import '../storage/secure_storage.dart';
 
 class ApiClient {
   late final Dio dio;
+  VoidCallback? onUnauthenticated;
+  Completer<bool>? _refreshCompleter;
 
   ApiClient() {
     dio = Dio(BaseOptions(
@@ -23,10 +27,26 @@ class ApiClient {
       },
       onError: (error, handler) async {
         if (error.response?.statusCode == 401) {
+          final path = error.requestOptions.path;
+          // Don't attempt to refresh if the error came from auth endpoints
+          if (path.contains('/auth/login') ||
+              path.contains('/auth/register') ||
+              path.contains('/auth/refresh')) {
+            return handler.next(error);
+          }
+
           final refreshed = await _refreshToken();
           if (refreshed) {
-            final retryResponse = await _retry(error.requestOptions);
-            return handler.resolve(retryResponse);
+            try {
+              final retryResponse = await _retry(error.requestOptions);
+              return handler.resolve(retryResponse);
+            } catch (retryError) {
+              if (retryError is DioException) {
+                return handler.next(retryError);
+              }
+            }
+          } else {
+            onUnauthenticated?.call();
           }
         }
         handler.next(error);
@@ -35,22 +55,47 @@ class ApiClient {
   }
 
   Future<bool> _refreshToken() async {
+    // If a refresh is already in flight, wait for it instead of sending duplicate requests
+    if (_refreshCompleter != null) {
+      return _refreshCompleter!.future;
+    }
+
+    final completer = Completer<bool>();
+    _refreshCompleter = completer;
+
     try {
       final refreshToken = await SecureStorage.getRefreshToken();
-      if (refreshToken == null) return false;
+      if (refreshToken == null) {
+        completer.complete(false);
+        _refreshCompleter = null;
+        return false;
+      }
 
       final response = await Dio(BaseOptions(
         baseUrl: ApiConstants.baseUrl,
+        connectTimeout: ApiConstants.connectTimeout,
+        receiveTimeout: ApiConstants.receiveTimeout,
       )).post('/auth/refresh', data: {'refreshToken': refreshToken});
 
       final data = response.data as Map<String, dynamic>;
-      await SecureStorage.saveTokens(
-        accessToken: data['accessToken'] as String,
-        refreshToken: data['refreshToken'] as String,
-      );
-      return true;
+      if (data['accessToken'] != null && data['refreshToken'] != null) {
+        await SecureStorage.saveTokens(
+          accessToken: data['accessToken'] as String,
+          refreshToken: data['refreshToken'] as String,
+        );
+        completer.complete(true);
+        _refreshCompleter = null;
+        return true;
+      } else {
+        await SecureStorage.clearTokens();
+        completer.complete(false);
+        _refreshCompleter = null;
+        return false;
+      }
     } catch (_) {
       await SecureStorage.clearTokens();
+      completer.complete(false);
+      _refreshCompleter = null;
       return false;
     }
   }

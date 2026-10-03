@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'auth_provider.dart';
 import '../services/api/users_api.dart';
@@ -10,11 +11,13 @@ class UserState {
   final Map<String, dynamic>? profile;
   final bool isLoading;
   final String? error;
+  final bool isAuthError;
 
   const UserState({
     this.profile,
     this.isLoading = false,
     this.error,
+    this.isAuthError = false,
   });
 }
 
@@ -40,12 +43,37 @@ class UserNotifier extends Notifier<UserState> {
       final result = await ref.read(usersApiProvider).getProfile();
       state = UserState(profile: result, isLoading: false);
     } catch (e) {
+      final isAuth = e is DioException && e.response?.statusCode == 401;
       state = UserState(
         profile: state.profile,
         isLoading: false,
-        error: e.toString(),
+        error: _formatError(e),
+        isAuthError: isAuth,
       );
     }
+  }
+
+  String _formatError(dynamic e) {
+    if (e is DioException) {
+      if (e.response?.statusCode == 401) {
+        return 'Session expired. Please sign in again to continue.';
+      }
+      final resData = e.response?.data;
+      if (resData is Map && resData['message'] != null) {
+        final msg = resData['message'];
+        if (msg is List && msg.isNotEmpty) return msg.first.toString();
+        if (msg is String) return msg;
+      }
+      if (e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.connectionError) {
+        return 'Could not connect to server. Check your network.';
+      }
+      if (e.type == DioExceptionType.receiveTimeout ||
+          e.type == DioExceptionType.sendTimeout) {
+        return 'Server took too long to respond. Cloud instance may be waking up.';
+      }
+    }
+    return 'Could not load profile. Please tap retry.';
   }
 
   Future<void> updateProfile(Map<String, dynamic> data) async {
@@ -55,7 +83,7 @@ class UserNotifier extends Notifier<UserState> {
     } catch (e) {
       state = UserState(
         profile: state.profile,
-        error: e.toString(),
+        error: _formatError(e),
       );
     }
   }
@@ -66,7 +94,7 @@ class UserNotifier extends Notifier<UserState> {
     } catch (e) {
       state = UserState(
         profile: state.profile,
-        error: e.toString(),
+        error: _formatError(e),
       );
     }
   }
